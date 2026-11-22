@@ -4,6 +4,7 @@
 #include <math.h>
 #include "jk/values.h"
 #include "jk/king.h"
+#include <stdlib.h>
 
 static int fails = 0;
 #define CHECK(cond, ...) do { int ok_ = (cond); printf("%s ", ok_ ? "[ok]  " : "[FALLO]"); \
@@ -13,6 +14,68 @@ static const jk_input NONE = {0,0,0}, JUMP = {0,0,1}, RIGHT = {0,1,0}, JUMP_R = 
 #define FLOOR_Y (344.0f - JK_KING_H)
 
 static void settle(jk_king *k) { for (int i = 0; i < 5; i++) jk_king_update(k, &jk_test_level, NONE); }
+
+/* Nivel real (assets_ps2/level.bin de tu copia), si existe: busca una celda y deja caer al rey. */
+static unsigned char *load_file(const char *path, int *n)
+{
+    FILE *f = fopen(path, "rb"); if (!f) return NULL;
+    fseek(f, 0, SEEK_END); *n = (int)ftell(f); fseek(f, 0, SEEK_SET);
+    unsigned char *b = malloc(*n); if (fread(b, 1, *n, f) != (size_t)*n) { free(b); b = NULL; }
+    fclose(f); return b;
+}
+
+/* Primera celda del tipo pedido con aire encima (4 celdas) en la pantalla s. */
+static int find_tile(const jk_level *lv, int s, int kind, int slope, int *tx, int *ty)
+{
+    for (int y = 4; y < JK_TILE_H; y++)
+        for (int x = 3; x < JK_TILE_W - 3; x++) {
+            unsigned char c = lv->grid[(s * JK_TILE_H + y) * JK_TILE_W + x];
+            if ((c & 15) != kind || (slope >= 0 && (c >> 4) != slope)) continue;
+            int clear = 1;
+            for (int a = 1; a <= 4 && clear; a++)
+                for (int dx = -2; dx <= 2; dx++)
+                    if (lv->grid[(s * JK_TILE_H + y - a) * JK_TILE_W + x + dx] & 15) clear = 0;
+            if (clear) { *tx = x; *ty = y; return 1; }
+        }
+    return 0;
+}
+
+static void real_level_tests(void)
+{
+    int n; unsigned char *bin = load_file("assets_ps2/level.bin", &n);
+    jk_level lv;
+    if (!bin || jk_level_from_bin(&lv, bin, n) != 0) { printf("(sin assets_ps2/level.bin: pruebas del nivel real omitidas)\n"); return; }
+    const jk_input none = {0,0,0};
+    int found = 0;
+    for (int s = 0; s < lv.count && !found; s++) {
+        int tx, ty;
+        if (!find_tile(&lv, s, JK_B_SLOPE, JK_SLOPE_TL, &tx, &ty)) continue;
+        found = 1;
+        /* solo el borde derecho de la caja sobre la diagonal: si toca tambien el bloque plano de
+         * al lado, el original anula la pendiente (caja a la misma altura que una pendiente superior) */
+        jk_king k; jk_king_init(&k, (float)(tx * 8 + 2 - JK_KING_W), (float)((ty - s * JK_TILE_H) * 8 - 40));
+        k.screen = s; k.body.on_ground = 0;
+        float maxvx = 0;
+        for (int f = 0; f < 60; f++) { jk_king_update(&k, &lv, none); if (fabsf(k.body.vx) > maxvx) maxvx = fabsf(k.body.vx); }
+        printf("pendiente en pantalla %d: |vx| maximo %.2f\n", s, maxvx);
+        CHECK(maxvx > 0.5f, "caer sobre una pendiente hace deslizar al rey");
+    }
+    if (!found) printf("(no se encontro pendiente libre para probar)\n");
+    found = 0;
+    for (int s = 0; s < lv.count && !found; s++) {
+        int tx, ty;
+        if (!find_tile(&lv, s, JK_B_ICE, -1, &tx, &ty)) continue;
+        found = 1;
+        jk_king k; jk_king_init(&k, (float)(tx * 8 - 5), (float)((ty - s * JK_TILE_H) * 8 - 26));
+        k.screen = s;
+        for (int f = 0; f < 5; f++) jk_king_update(&k, &lv, none);
+        k.body.vx = 1.5f;
+        jk_king_update(&k, &lv, none);
+        printf("hielo en pantalla %d: en_hielo=%d vx tras 1 frame=%.2f\n", s, k.body.on_ice, k.body.vx);
+        CHECK(k.body.on_ice && k.body.vx > 1.3f && k.body.vx < 1.5f, "en hielo el rey frena 0.1 por frame");
+    }
+    free(bin);
+}
 
 int main(void)
 {
@@ -71,6 +134,8 @@ int main(void)
     CHECK(splat_seen, "caida a velocidad maxima produce splat");
     CHECK(recover_frame - landed_frame == 29, "el splat bloquea 30 ticks (0.5 s, contando el del aterrizaje)");
     CHECK(k.screen == 0, "la camara baja a la pantalla 0");
+
+    real_level_tests();
 
     printf(fails ? "\n%d FALLOS\n" : "\nTodo bien\n", fails);
     return fails != 0;

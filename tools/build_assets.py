@@ -41,16 +41,71 @@ def level_cells(src):
     return screens
 
 
+SOLID_FOR_EDGE = {(0, 0, 0), (255, 0, 0), (0, 255, 255), (255, 255, 0), (255, 106, 0)}   # IsSolidBlock
+FAKE = (128, 128, 128)
+
+
 def write_level(src, out):
+    """level.bin v2 ('JKL2'): por pantalla una cabecera (viento, teletransporte) y 60x45 celdas.
+    Celda = tipo | (pendiente << 4); pendiente 0..3 = TopLeft, TopRight, BottomLeft, BottomRight, 4 = ninguna."""
     screens = level_cells(src)
+    n = len(screens)
+
+    def rgba(s, x, y):
+        # LevelTexture.GetCoord: y fuera de 0..44 pasa a la pantalla de arriba/abajo
+        while y < 0:
+            y += TILE_H; s += 1
+        while y >= TILE_H:
+            y -= TILE_H; s -= 1
+        if s < 0 or s >= n:
+            return None
+        return tuple(int(v) for v in screens[s][y, x])
+
+    def is_edge(s, x, y):                                  # LevelManager.IsBlockEdge
+        if x < 0 or x >= TILE_W:
+            return True
+        c = rgba(s, x, y)
+        if c is None or c[3] != 255:
+            return False
+        return c[:3] in SOLID_FOR_EDGE or c[:3] == FAKE
+
+    def slope_type(s, x, y):                               # BaseBlockFactory.GetSlopeType
+        if is_edge(s, x + 1, y) and is_edge(s, x, y + 1): return 0
+        if is_edge(s, x - 1, y) and is_edge(s, x, y + 1): return 1
+        if is_edge(s, x + 1, y) and is_edge(s, x, y - 1): return 2
+        if is_edge(s, x - 1, y) and is_edge(s, x, y - 1): return 3
+        return 4
+
     with open(os.path.join(out, 'level.bin'), 'wb') as f:
-        f.write(b'JKLV' + struct.pack('<I', len(screens)))
-        for cells in screens:
+        f.write(b'JKL2' + struct.pack('<I', n))
+        for si, cells in enumerate(screens):
             grid = np.zeros((TILE_H, TILE_W), np.uint8)
+            opaque = cells[:, :, 3] == 255
             for code, kind in BLOCK_CODES.items():
-                grid[np.all(cells == (*code, 255), axis=2)] = kind
+                grid[np.all(cells[:, :, :3] == code, axis=2) & opaque] = kind
+            wind_on, wind_int, wind_dir, tele = 0, 0.0, -1, [-1, -1]
+            for y in range(TILE_H):
+                for x in range(TILE_W):
+                    r, g, b, a = (int(v) for v in cells[y, x])
+                    if a != 255:
+                        continue
+                    if grid[y, x] == 2:
+                        grid[y, x] |= slope_type(si, x, y) << 4
+                    if grid[y, x]:
+                        continue
+                    if (r, g, b) == (0, 255, 0):           # BLOCKCODE_WIND
+                        wind_on = 1
+                    if g == 0 and b == 255:                # enlace de teletransporte (indice 1-based en R)
+                        tele[1 if x >= 30 else 0] = r
+                    if g == 255 and b == 0:                # viento con intensidad/direccion
+                        if 191 < r < 208: wind_int = float(r - 191)
+                        if 207 < r < 224: wind_int, wind_dir = float(r - 207), 1
+                        if 223 < r < 240: wind_int, wind_dir = float(r - 223), 0
+                        wind_on = 1
+            # cabecera de 16 bytes: viento on, direccion (-1/0/1), -, intensidad, teletransporte x2, -
+            f.write(struct.pack('<Bbhfhhi', wind_on, wind_dir, 0, wind_int, tele[0], tele[1], 0))
             f.write(grid.tobytes())
-    return len(screens)
+    return n
 
 
 def swizzle_clut(pal):

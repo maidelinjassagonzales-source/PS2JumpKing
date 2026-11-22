@@ -52,6 +52,11 @@ static void do_jump(jk_king *k, jk_input in, float intensity)
     for (int i = 0; x == 0 && i < k->dpad_count; i++)
         x = k->dpad_hist[i];
 
+    /* en nieve, un salto muy corto no sale y uno corto se alarga al minimo */
+    if (b->on_snow && intensity < 0.3f) {
+        if (!(intensity > 0.2f)) return;     /* como DoJump: ni salta ni suena */
+        intensity = 0.3f;
+    }
     b->vy = JK.jump * intensity;
     b->vx += (float)x * JK.air_speed;
     if (b->vx < -JK.air_speed) b->vx = -JK.air_speed;
@@ -72,12 +77,12 @@ static jk_result jump_run(jk_king *k, jk_input in)
     push_dpad(k, dpad_x(in));
     if (k->charge == 0.0f && !try_consume_jump(k))
         return node_leave(&k->jump_node, k->tick, JK_FAILURE);
-    if (k->charge == 0.0f && in.jump)
+    if (k->charge == 0.0f && in.jump && !b->on_ice)
         b->vx = 0.0f;
-    if (b->on_ground)
+    if (!b->on_ice && b->on_ground)
         b->vx = 0.0f;
 
-    k->charge += JK_DT * 1.0f;          /* multiplicador de agua: pendiente */
+    k->charge += JK_DT * jk_body_multiplier(b);
     if (k->charge >= JK.charge_time || !in.jump) {
         float t = k->charge / JK.charge_time;
         do_jump(k, in, t < 1.0f ? t : 1.0f);
@@ -90,8 +95,23 @@ static jk_result jump_run(jk_king *k, jk_input in)
 
 static jk_result walk_run(jk_king *k, jk_input in)
 {
+    jk_body *b = &k->body;
+    if (b->vy < 0.0f && b->on_sand)
+        return JK_FAILURE;
     int x = dpad_x(in);
-    k->body.vx = (float)x * JK.walk_speed;
+    float target = (float)x * JK.walk_speed;
+    if (b->on_snow) {
+        b->vx = 0.0f;
+    } else if (b->on_ice) {
+        /* en hielo se acelera de a poco hacia la velocidad de andar */
+        int same = (target > 0) - (target < 0) == (b->vx > 0) - (b->vx < 0);
+        if (target != 0.0f && (!same || fabsf(target) > fabsf(b->vx))) {
+            float d = target - b->vx, st = JK.ice_friction * 2.0f;
+            b->vx += d < -st ? -st : (d > st ? st : d);
+        }
+    } else {
+        b->vx = target;
+    }
     set_facing(k, x);
     return x == 0 ? JK_FAILURE : JK_SUCCESS;
 }
@@ -113,7 +133,7 @@ static jk_result fail_run(jk_king *k, jk_input in)
     if (is_new)
         splat_reset(k);
     if (is_resume) {
-        b->vx = 0.0f;
+        if (!b->on_ice) b->vx = 0.0f;
         k->splat_timer = 0.0f;
     }
 
@@ -123,11 +143,11 @@ static jk_result fail_run(jk_king *k, jk_input in)
             k->splatted = 0;
             return node_leave(&k->fail_node, k->tick, JK_FAILURE);
         }
-        b->vx = 0.0f;
+        if (!b->on_ice) b->vx = 0.0f;
         k->splatted = 1;
         k->events |= JK_EV_SPLAT;
     }
-    b->vx = 0.0f;
+    if (!b->on_ice) b->vx = 0.0f;
     if (!k->splat_done && b->on_ground) {
         k->splat_timer += JK_DT;
         if (k->splat_timer >= JK.splat_time) {
@@ -173,7 +193,8 @@ void jk_king_update(jk_king *k, const jk_level *lv, jk_input in)
     /* 1. fisica */
     int was_ground = k->was_ground;
     k->events = 0;
-    jk_body_step(&k->body, lv, k->screen);
+    k->body.run_time += JK_DT;
+    jk_body_step(&k->body, lv, &k->screen);
     if (k->body.flags & JK_FLAG_BUMP) k->events |= JK_EV_BUMP;
 
     /* 2. entrada: pulsar salto habilita un salto, soltarlo lo cancela */
@@ -183,7 +204,7 @@ void jk_king_update(jk_king *k, const jk_level *lv, jk_input in)
 
     /* 3. decisiones */
     k->tick++;
-    if (k->body.on_ground) {
+    if (k->body.on_ground || k->body.on_sand) {
         /* IsOnGround: sonido de aterrizar al pasar a suelo (el splat tiene el suyo) */
         if (!was_ground && k->body.last_vy != JK.max_fall) k->events |= JK_EV_LAND;
         if (fail_run(k, in) == JK_FAILURE)

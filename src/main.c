@@ -164,10 +164,7 @@ int main(void)
     const jk_level *lv = &jk_test_level;
     int n = 0;
     unsigned char *lvbin = assets_load("level.bin", &n);
-    if (lvbin && n > 8 && memcmp(lvbin, "JKLV", 4) == 0) {
-        int count = lvbin[4] | lvbin[5] << 8;
-        if (jk_level_from_grid(&real, lvbin + 8, count) == 0) lv = &real;
-    }
+    if (lvbin && jk_level_from_bin(&real, lvbin, n) == 0) lv = &real;
     GSTEXTURE sheet; memset(&sheet, 0, sizeof sheet);
     memset(layer, 0, sizeof layer);
     int have_sheet = assets_t8(gs, "king.t8", &sheet, 0) == 0;
