@@ -46,6 +46,10 @@ int assets_t8(GSGLOBAL *gs, const char *name, GSTEXTURE *t, int keep_vram)
     if (!keep_vram) {
         t->Vram = gsKit_vram_alloc(gs, gsKit_texture_size(w, h, t->PSM), GSKIT_ALLOC_USERBUFFER);
         t->VramClut = gsKit_vram_alloc(gs, gsKit_texture_size(16, 16, t->ClutPSM), GSKIT_ALLOC_USERBUFFER);
+        if (t->Vram == GSKIT_ALLOC_ERROR || t->VramClut == GSKIT_ALLOC_ERROR) {
+            printf("[jk] sin VRAM para %s\n", name);
+            return -1;
+        }
     }
     gsKit_texture_upload(gs, t);
     return 0;

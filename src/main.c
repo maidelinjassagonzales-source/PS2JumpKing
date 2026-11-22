@@ -132,6 +132,9 @@ int main(void)
     jk_values_init();
 
     GSGLOBAL *gs = gsKit_init_global();
+    /* VRAM: framebuffer doble de 16 bits y sin Z-buffer, para que quepan las 3 capas y el rey. */
+    gs->PSM = GS_PSM_CT16;
+    gs->ZBuffering = GS_SETTING_OFF;
     dmaKit_init(D_CTRL_RELE_OFF, D_CTRL_MFD_OFF, D_CTRL_STS_UNSPEC,
                 D_CTRL_STD_OFF, D_CTRL_RCYC_8, 1 << DMA_CHANNEL_GIF);
     dmaKit_chan_init(DMA_CHANNEL_GIF);
@@ -140,6 +143,7 @@ int main(void)
     gs->PrimAlphaEnable = GS_SETTING_ON;
     gsKit_set_primalpha(gs, GS_SETREG_ALPHA(0, 1, 0, 1, 0), 0);
     gsKit_set_test(gs, GS_ATEST_OFF);
+    gsKit_set_test(gs, GS_ZTEST_OFF);
 
     const u64 border = GS_SETREG_RGBAQ(0x00, 0x00, 0x00, 0x80, 0x00);
     const u64 wall   = GS_SETREG_RGBAQ(0x70, 0x68, 0x60, 0x80, 0x00);
