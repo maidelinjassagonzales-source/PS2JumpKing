@@ -4,6 +4,7 @@
 #include "props.h"
 #include "assets.h"
 #include "jk/values.h"
+#include "items.h"
 
 #define MAX_TYPES 32
 #define MAX_PROPS 400
@@ -16,7 +17,7 @@ typedef struct { float fps; int cx, cy, rnd, nframes; float frames[32]; } ptype;
 typedef struct { int screen1, type, x, y, flip; float timer; int frame; } prop;
 typedef struct { int screen1, x, y, treasure, look_right, fly_right; float trigger; } bpos;
 typedef struct {
-    int tex, is_fly, sfx, npos;
+    int tex, is_fly, sfx, npos, item, dropped;
     bpos pos[MAX_BPOS];
     int home, done;                 /* RavenState: posicion actual, ya no vuelve */
     int fleeing; float px, py, vx, vy; int tick, frame; float idle_t;
@@ -59,7 +60,7 @@ int props_init(GSGLOBAL *gs)
         for (int i = 0; i < count && nbirds < MAX_BIRDS; i++) {
             bird *bd = &birds[nbirds++];
             memset(bd, 0, sizeof *bd);
-            bd->tex = p[0]; bd->is_fly = p[1]; bd->sfx = (signed char)p[2]; bd->npos = p[3]; p += 4;
+            bd->tex = p[0]; bd->is_fly = p[1]; bd->sfx = (signed char)p[2]; bd->npos = p[3]; bd->item = p[4]; p += 5;
             for (int k = 0; k < bd->npos; k++, p += 13)
                 if (k < MAX_BPOS) {
                     bpos *q = &bd->pos[k];
@@ -155,6 +156,12 @@ void props_update(GSGLOBAL *gs, const jk_king *k, float dt)
             b->fleeing = 0;                                      /* OnFlee: siguiente posicion */
             if (++b->home >= b->npos) { b->home = b->npos - 1; if (b->is_fly) b->done = 1; }
             if (b->pos[b->home].screen1 - 1 != k->screen) bird_slot[i] = -1;   /* su textura llega con esa pantalla */
+            /* RavenComp: en la ultima posicion suelta su objeto una sola vez */
+            if (b->home >= b->npos - 1 && !b->dropped && b->item != 255) {
+                const bpos *last = &b->pos[b->npos - 1];
+                items_spawn(b->item, last->screen1, last->x - 5, last->y + 8);
+                b->dropped = 1;
+            }
         }
     }
 }
@@ -196,7 +203,10 @@ int props_save(unsigned char *out, int max)
     int p = 0;
     if (max < 1 + nbirds * 2) return 0;
     out[p++] = (unsigned char)nbirds;
-    for (int i = 0; i < nbirds; i++) { out[p++] = (unsigned char)birds[i].home; out[p++] = (unsigned char)birds[i].done; }
+    for (int i = 0; i < nbirds; i++) {
+        out[p++] = (unsigned char)birds[i].home;
+        out[p++] = (unsigned char)(birds[i].done | birds[i].dropped << 1);
+    }
     return p;
 }
 
@@ -205,13 +215,14 @@ void props_load(const unsigned char *in, int size)
     if (size < 1) return;
     int n = in[0];
     for (int i = 0; i < n && i < nbirds && 2 + i * 2 < size + 1; i++) {
-        birds[i].home = in[1 + i * 2]; birds[i].done = in[2 + i * 2]; birds[i].fleeing = 0;
+        birds[i].home = in[1 + i * 2]; birds[i].done = in[2 + i * 2] & 1;
+        birds[i].dropped = in[2 + i * 2] >> 1 & 1; birds[i].fleeing = 0;
     }
     assets_pool_reset();
 }
 
 void props_reset(void)
 {
-    for (int i = 0; i < nbirds; i++) { birds[i].home = 0; birds[i].done = 0; birds[i].fleeing = 0; }
+    for (int i = 0; i < nbirds; i++) { birds[i].home = 0; birds[i].done = 0; birds[i].dropped = 0; birds[i].fleeing = 0; }
     assets_pool_reset();
 }

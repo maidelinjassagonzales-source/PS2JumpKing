@@ -11,6 +11,7 @@
 #include "assets.h"
 #include "audio.h"
 #include "jk/values.h"
+#include "items.h"
 
 enum {
     T_PRESS_START, T_CONTINUE, T_NEW_GAME, T_RESUME, T_SAVE_EXIT, T_SURE, T_YES, T_NO,
@@ -296,6 +297,22 @@ static void fmt2(char *out, int sz, const char *t, const char *a, const char *b)
     strncpy(out, tmp, sz - 1); out[sz - 1] = 0;
 }
 
+/* Inventario (InventoryButton): un boton por objeto que se tiene; las monedas con su cantidad */
+static char inv_lines[ITEM_KINDS][80];
+static void build_inventory(void)
+{
+    menu *m = &menus[M_INV];
+    m->n = 0; m->sel = 0;
+    for (int i = 0; i < ITEM_KINDS; i++) {
+        int c = items_count(i);
+        if (c <= 0) continue;
+        if (c > 1) snprintf(inv_lines[i], sizeof inv_lines[i], "%s x%d", items_name(i), c);
+        else snprintf(inv_lines[i], sizeof inv_lines[i], "%s", items_name(i));
+        add(m, (item){ K_BUTTON, inv_lines[i], WHITE, 0, A_NONE, 0, 0, 0, 0, 0 });
+    }
+    finish(m);
+}
+
 static void update_stats_text(void)
 {
     char a[16], b[16];
@@ -513,11 +530,13 @@ static int menu_input(int pressed)
     case K_BUTTON:
         if (it->action == A_SUB) {
             if (it->sub == M_STATS) update_stats_text();
+            if (it->sub == M_INV) build_inventory();
             push(it->sub);
             return A_NONE;
         }
         if (it->action == A_FAIL) { audio_play_sfx(SFX_MENU_FAIL); return A_NONE; }
         if (it->sub == -1) { pop(); return A_NONE; }
+        if (it->action == A_NONE) return A_NONE;
         return it->action;
     }
     return A_NONE;

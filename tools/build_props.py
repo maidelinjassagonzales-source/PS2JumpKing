@@ -67,9 +67,10 @@ def main():
                         int(rp.findtext('position/Y') or 0), rp.findtext('treasure') == 'true',
                         rp.findtext('look_direction') != 'Left', rp.findtext('fly_direction') != 'Left',
                         float(td) if td else 40.0))
-        birds.append((tex_ids[tex], tex == 'fly', sfx, pos))
+        item = r.findtext('item') or 'NULL'
+        birds.append((tex_ids[tex], tex == 'fly', sfx, pos, item))
     sfx_ids = {}
-    for _, _, sfx, _ in birds:
+    for _, _, sfx, _, _ in birds:
         if sfx not in sfx_ids:
             p = os.path.join(src, 'audio', 'event_sfx', sfx + '.xnb')
             if os.path.exists(p):
@@ -77,8 +78,10 @@ def main():
                 write_pcm(os.path.join(out, 'audio', f'bird{sfx_ids[sfx]}.pcm'), to_pcm(p, 1))
     with open(os.path.join(out, 'birds.bin'), 'wb') as f:
         f.write(b'JKBD' + struct.pack('<H', len(birds)))
-        for tid, is_fly, sfx, pos in birds:
-            f.write(struct.pack('<BBbB', tid, int(is_fly), sfx_ids.get(sfx, -1), len(pos)))
+        from build_items import ITEMS
+        for tid, is_fly, sfx, pos, item in birds:
+            iid = ITEMS.index(item) if item in ITEMS else 255
+            f.write(struct.pack('<BBbBB', tid, int(is_fly), sfx_ids.get(sfx, -1), len(pos), iid))
             for sc, x, y, tr, look_r, fly_r, td in pos:
                 f.write(struct.pack('<HhhBBBf', sc, x, y, int(tr), int(look_r), int(fly_r), td))
     print(f'pajaros: {len(birds)} ({sum(len(b[3]) for b in birds)} posiciones), sonidos: {len(sfx_ids)}')

@@ -16,6 +16,7 @@
 #include "save.h"
 #include "walls.h"
 #include "props.h"
+#include "items.h"
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -96,6 +97,8 @@ static void game_save(const jk_king *k)
     blob[p] = n & 255; blob[p + 1] = n >> 8; p += 2 + n;
     int b = props_save(blob + p + 2, SAVE_BLOB_MAX - p - 2);
     blob[p] = b & 255; blob[p + 1] = b >> 8; p += 2 + b;
+    int it = items_save(blob + p + 2, SAVE_BLOB_MAX - p - 2);
+    blob[p] = it & 255; blob[p + 1] = it >> 8; p += 2 + it;
     save_write(blob, p);
 }
 
@@ -117,6 +120,11 @@ static int game_load(jk_king *k)
     if (p + 2 <= size) {
         int b = blob[p] | blob[p + 1] << 8; p += 2;
         if (p + b <= size) props_load(blob + p, b);
+        p += b;
+    }
+    if (p + 2 <= size) {
+        int it = blob[p] | blob[p + 1] << 8; p += 2;
+        if (p + it <= size) items_load(blob + p, it);
     }
     return 0;
 }
@@ -230,6 +238,7 @@ int main(void)
     audio_init();
     npc_init(gs);
     walls_init(gs);
+    items_init(gs);
     props_init(gs);
 
     ui_init(gs);
@@ -268,6 +277,7 @@ int main(void)
                 save_delete();
                 npc_reset();
                 props_reset();
+                items_reset();
                 ui_new_attempt();
                 jk_king_init(&k, 240.0f, 200.0f);
                 walk_tick = 0.0f;
@@ -314,6 +324,8 @@ int main(void)
             signs_update(&k, in, JK_DT);
             walls_update(gs, &k, JK_DT);
             props_update(gs, &k, JK_DT);
+            items_update(gs, &k);
+            if (items_take_pickup()) audio_play_sfx(SFX_SELECT);
             int bs = props_take_bird_sfx();
             if (bs >= 0 && bs < 3) audio_play_sfx(SFX_BIRD0 + bs);
         }
@@ -327,6 +339,7 @@ int main(void)
             draw_layer(gs, 0);
             draw_layer(gs, 1);
             props_draw(gs, k.screen, SX, SY);
+            items_draw(gs, k.screen, SX, SY);
             npc_draw(gs, k.screen, SX, SY);
         } else {
             for (int s = 0; s < lv->count; s++)
