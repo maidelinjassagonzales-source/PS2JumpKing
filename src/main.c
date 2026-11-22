@@ -13,7 +13,8 @@
 #define VIEW_X 80   /* 480x360 centrado en 640x448 */
 #define VIEW_Y 44
 
-static char pad_buf[256] __attribute__((aligned(64)));
+static char pad_buf[2][256] __attribute__((aligned(64)));
+static int  pad_mode_set[2];
 
 static void pad_init(void)
 {
@@ -21,20 +22,33 @@ static void pad_init(void)
     SifLoadModule("rom0:SIO2MAN", 0, NULL);
     SifLoadModule("rom0:PADMAN", 0, NULL);
     padInit(0);
-    padPortOpen(0, 0, pad_buf);
+    for (int p = 0; p < 2; p++)
+        padPortOpen(p, 0, pad_buf[p]);
 }
 
+/* Lee los dos puertos: cruceta o stick izquierdo para andar, X para saltar. */
 static jk_input pad_read(void)
 {
     jk_input in = {0, 0, 0};
-    struct padButtonStatus st;
-    int s = padGetState(0, 0);
-    if ((s != PAD_STATE_STABLE && s != PAD_STATE_FINDCTP1) || padRead(0, 0, &st) == 0)
-        return in;
-    u32 b = 0xFFFF ^ st.btns;
-    in.left  = (b & PAD_LEFT) != 0;
-    in.right = (b & PAD_RIGHT) != 0;
-    in.jump  = (b & PAD_CROSS) != 0;
+    for (int p = 0; p < 2; p++) {
+        struct padButtonStatus st;
+        int s = padGetState(p, 0);
+        if (s == PAD_STATE_DISCONN) { pad_mode_set[p] = 0; continue; }
+        if (s != PAD_STATE_STABLE && s != PAD_STATE_FINDCTP1) continue;
+        if (!pad_mode_set[p]) {
+            padSetMainMode(p, 0, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK);
+            pad_mode_set[p] = 1;
+            continue;
+        }
+        if (padRead(p, 0, &st) == 0) continue;
+        u32 b = 0xFFFF ^ st.btns;
+        int lx = 0;
+        if ((st.mode >> 4) == 0x7)          /* DualShock en analogico */
+            lx = (int)st.ljoy_h - 128;
+        in.left  |= (b & PAD_LEFT) != 0  || lx < -77;
+        in.right |= (b & PAD_RIGHT) != 0 || lx >  77;
+        in.jump  |= (b & PAD_CROSS) != 0;
+    }
     return in;
 }
 
