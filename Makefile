@@ -1,6 +1,6 @@
 # Jump King PS2 - port homebrew (PS2SDK + gsKit). Compilar (WSL): make
 EE_BIN  = jumpking_ps2.elf
-EE_OBJS = src/main.o
+EE_OBJS = src/main.o src/jk/values.o src/jk/level.o src/jk/body.o src/jk/king.o src/jk/camera.o
 
 EE_INCS    += -Isrc -I$(GSKIT)/include
 EE_LDFLAGS += -L$(GSKIT)/lib
@@ -14,3 +14,9 @@ clean:
 
 include $(PS2SDK)/samples/Makefile.pref
 include $(PS2SDK)/samples/Makefile.eeglobal
+
+# Pruebas de la fisica en el PC (gcc nativo): make test
+JK_SRCS = src/jk/values.c src/jk/level.c src/jk/body.c src/jk/king.c src/jk/camera.c
+test:
+	gcc -O2 -Wall -Wextra -Isrc -o tests/host_sim $(JK_SRCS) tests/host_sim.c -lm
+	./tests/host_sim

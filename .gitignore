@@ -6,3 +6,4 @@ build/
 *.elf
 *.iso
 *.o
+tests/host_sim
