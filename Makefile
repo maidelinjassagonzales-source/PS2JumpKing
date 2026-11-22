@@ -1,6 +1,6 @@
 # Jump King PS2 - port homebrew (PS2SDK + gsKit). Compilar (WSL): make
 EE_BIN  = jumpking_ps2.elf
-EE_OBJS = src/main.o src/assets.o src/audio.o src/npc.o src/ui.o src/font.o src/save.o src/walls.o src/props.o src/items.o src/ending.o src/scroll.o src/audsrv_irx.o src/jk/values.o src/jk/level.o src/jk/body.o src/jk/king.o src/jk/camera.o
+EE_OBJS = src/main.o src/assets.o src/audio.o src/npc.o src/ui.o src/font.o src/save.o src/walls.o src/props.o src/items.o src/ending.o src/scroll.o src/weather.o src/audsrv_irx.o src/jk/values.o src/jk/level.o src/jk/body.o src/jk/king.o src/jk/camera.o
 
 EE_INCS    += -Isrc -I$(GSKIT)/include
 EE_LDFLAGS += -L$(GSKIT)/lib
@@ -31,6 +31,7 @@ assets:
 	python3 -I tools/build_audio.py "$(GAME)" assets_ps2
 	tools/_bin/ilspy/ilspycmd.exe -p -o _ref/lang_es "$(GAME)/es-ES/LanguageJK.resources.dll"
 	python3 -I tools/build_npcs.py "$(GAME)" assets_ps2 _ref/lang_es/LanguageJK.language.es-ES.resx
+	python3 -I tools/build_weather.py "$(GAME)" assets_ps2
 	python3 -I tools/build_scroll.py "$(GAME)" assets_ps2
 	python3 -I tools/build_ending.py "$(GAME)" assets_ps2
 	python3 -I tools/build_items.py "$(GAME)" assets_ps2 _ref/lang_es/LanguageJK.language.es-ES.resx

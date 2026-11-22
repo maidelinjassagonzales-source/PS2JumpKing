@@ -19,6 +19,7 @@
 #include "items.h"
 #include "ending.h"
 #include "scroll.h"
+#include "weather.h"
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -251,6 +252,7 @@ int main(void)
     items_init(gs);
     props_init(gs);
     scroll_init();
+    weather_init();
 
     ui_init(gs);
     save_init();
@@ -380,6 +382,7 @@ int main(void)
             walls_update(gs, &k, JK_DT);
             props_update(gs, &k, JK_DT);
             scroll_update(gs, k.screen, JK_DT);
+            weather_update(gs, k.screen, JK_DT);
             items_update(gs, &k);
             if (items_take_pickup()) audio_play_sfx(SFX_SELECT);
             int bs = props_take_bird_sfx();
@@ -395,6 +398,7 @@ int main(void)
             draw_layer(gs, 0);
             scroll_draw(gs, k.screen, 0, cam_ox, cam_oy, SX, SY);    /* LevelScreen: entre fondo y capa media */
             draw_layer(gs, 1);
+            if (state != ST_ENDING) weather_draw(gs, k.screen, 0, SX, SY);   /* clima de fondo */
             if (state != ST_ENDING) {
                 props_draw(gs, k.screen, SX, SY);
                 items_draw(gs, k.screen, SX, SY);
@@ -422,6 +426,7 @@ int main(void)
             if (state != ST_ENDING) walls_draw(gs, k.screen, SX, SY);
             draw_layer(gs, 2);
             scroll_draw(gs, k.screen, 1, cam_ox, cam_oy, SX, SY);    /* y encima del frente */
+            if (state != ST_ENDING) weather_draw(gs, k.screen, 1, SX, SY);   /* clima de frente */
             npc_draw_bubbles(gs, k.screen, SX, SY);
         }
         if (state == ST_LOGO) ui_logo_draw(gs, SX, SY);
