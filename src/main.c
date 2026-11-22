@@ -145,8 +145,7 @@ static void load_screen_layers(GSGLOBAL *gs, int screen)
     for (int i = 0; i < 3; i++) {
         char name[32];
         snprintf(name, sizeof name, "screens/%c%d.t8", tags[i], screen);
-        layer_ok[i] = assets_t8(gs, name, &layer[i], layer_vram[i]) == 0;
-        if (layer_ok[i]) layer_vram[i] = 1;
+        layer_ok[i] = assets_t8(gs, name, &layer[i], 1) == 0;
     }
     loaded_screen = screen;
 }
@@ -243,7 +242,13 @@ int main(void)
 
     ui_init(gs);
     save_init();
-    if (lv->grid) load_screen_layers(gs, 0);      /* capas: VRAM permanente antes del pool */
+    /* capas de pantalla: VRAM fija de 480x360 para fondo, medio y frente, reservada antes del pool
+     * (no todas las pantallas tienen las tres capas, asi que no se puede esperar a la primera) */
+    for (int i = 0; i < 3; i++) {
+        layer[i].Vram = gsKit_vram_alloc(gs, gsKit_texture_size(480, 360, GS_PSM_T8), GSKIT_ALLOC_USERBUFFER);
+        layer[i].VramClut = gsKit_vram_alloc(gs, gsKit_texture_size(16, 16, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
+        layer_vram[i] = 1;
+    }
     assets_pool_init(gs);
 
     jk_king k;

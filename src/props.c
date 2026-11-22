@@ -193,7 +193,8 @@ void props_draw(GSGLOBAL *gs, int screen, float sx, float sy)
         int right = b->fleeing ? q->fly_right : q->look_right;
         float u1 = u0 + w;
         if (!right) { float tmp = u0; u0 = u1; u1 = tmp; }
-        float x = b->px, y = b->py + screen * JK_SCREEN_H;
+        /* RavenContent: sprites centrados en la posicion */
+        float x = b->px - w / 2.0f, y = b->py + screen * JK_SCREEN_H - h / 2.0f;
         gsKit_prim_sprite_texture(gs, t, x * sx, y * sy, u0, v0, (x + w) * sx, (y + h) * sy, u1, v0 + h, 3, 0x80808080);
     }
 }

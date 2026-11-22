@@ -56,6 +56,9 @@ def main():
             continue
         r = ET.parse(os.path.join(rdir, fn)).getroot()
         tex = r.findtext('texture')
+        # partida normal: el cuervo blanco es de Nueva buenorra+ y el tsuchinoko del modo fantasma
+        if tex in ('white_raven', 'tsuchinoko'):
+            continue
         if tex not in tex_ids:
             tex_ids[tex] = len(tex_ids)
             write_t8(texture_rgba(os.path.join(rdir, tex + '.xnb')), os.path.join(out, 'props', f'bird{tex_ids[tex]}.t8'))
