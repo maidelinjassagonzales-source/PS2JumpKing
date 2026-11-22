@@ -9,3 +9,4 @@ build/
 tests/host_sim
 assets_ps2/
 __pycache__/
+src/audsrv_irx.c

@@ -58,6 +58,7 @@ static void do_jump(jk_king *k, jk_input in, float intensity)
     if (b->vx >  JK.air_speed) b->vx =  JK.air_speed;
     set_facing(k, x);
     charge_reset(k);
+    k->events |= JK_EV_JUMP;
 }
 
 static jk_result jump_run(jk_king *k, jk_input in)
@@ -122,8 +123,9 @@ static jk_result fail_run(jk_king *k, jk_input in)
             k->splatted = 0;
             return node_leave(&k->fail_node, k->tick, JK_FAILURE);
         }
-        b->vx = 0.0f;                   /* aqui sonaria el golpe */
+        b->vx = 0.0f;
         k->splatted = 1;
+        k->events |= JK_EV_SPLAT;
     }
     b->vx = 0.0f;
     if (!k->splat_done && b->on_ground) {
@@ -169,7 +171,10 @@ void jk_king_init(jk_king *k, float x, float y)
 void jk_king_update(jk_king *k, const jk_level *lv, jk_input in)
 {
     /* 1. fisica */
+    int was_ground = k->was_ground;
+    k->events = 0;
     jk_body_step(&k->body, lv, k->screen);
+    if (k->body.flags & JK_FLAG_BUMP) k->events |= JK_EV_BUMP;
 
     /* 2. entrada: pulsar salto habilita un salto, soltarlo lo cancela */
     if (in.jump && !k->prev_jump) k->can_jump = 1;
@@ -179,6 +184,8 @@ void jk_king_update(jk_king *k, const jk_level *lv, jk_input in)
     /* 3. decisiones */
     k->tick++;
     if (k->body.on_ground) {
+        /* IsOnGround: sonido de aterrizar al pasar a suelo (el splat tiene el suyo) */
+        if (!was_ground && k->body.last_vy != JK.max_fall) k->events |= JK_EV_LAND;
         if (fail_run(k, in) == JK_FAILURE)
             if (jump_run(k, in) == JK_FAILURE)
                 walk_run(k, in);
@@ -186,6 +193,8 @@ void jk_king_update(jk_king *k, const jk_level *lv, jk_input in)
         grace_run(k);
         jump_run(k, in);
     }
+
+    k->was_ground = k->body.on_ground;
 
     /* 4. camara (va despues del arbol, como en el original) */
     jk_rect hb = jk_body_hitbox(&k->body);

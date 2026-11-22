@@ -10,6 +10,7 @@
 #include "jk/level.h"
 #include "jk/king.h"
 #include "assets.h"
+#include "audio.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -157,6 +158,7 @@ int main(void)
     GSTEXTURE sheet; memset(&sheet, 0, sizeof sheet);
     memset(layer, 0, sizeof layer);
     int have_sheet = assets_t8(gs, "king.t8", &sheet, 0) == 0;
+    audio_init();
 
     jk_king k;
     jk_king_init(&k, 240.0f, 200.0f);   /* posicion inicial del original */
@@ -167,6 +169,12 @@ int main(void)
         jk_king_update(&k, lv, in);
         if (lv->grid && k.screen != loaded_screen)
             load_screen_layers(gs, k.screen);
+        audio_set_screen(k.screen);
+        if (k.events & JK_EV_JUMP)  audio_play_sfx(SFX_JUMP);
+        if (k.events & JK_EV_LAND)  audio_play_sfx(SFX_LAND);
+        if (k.events & JK_EV_BUMP)  audio_play_sfx(SFX_BUMP);
+        if (k.events & JK_EV_SPLAT) audio_play_sfx(SFX_SPLAT);
+        audio_update();
 
         gsKit_clear(gs, border);
         if (lv->grid) {

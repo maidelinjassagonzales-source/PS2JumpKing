@@ -37,7 +37,11 @@ typedef struct {
     float   grace_timer;
 
     int     tick;
+    int     events;
+    int     was_ground;     /* JK_EV_* de este frame, para sonidos */
 } jk_king;
+
+enum { JK_EV_JUMP = 1, JK_EV_LAND = 2, JK_EV_BUMP = 4, JK_EV_SPLAT = 8 };
 
 void jk_king_init(jk_king *k, float x, float y);
 void jk_king_update(jk_king *k, const jk_level *lv, jk_input in);
