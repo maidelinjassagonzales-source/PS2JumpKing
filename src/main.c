@@ -60,6 +60,8 @@ static jk_input pad_read(void)
         }
         if ((b & PAD_UP) || ly < -77)   menu |= UI_UP;
         if ((b & PAD_DOWN) || ly > 77)  menu |= UI_DOWN;
+        if ((b & PAD_LEFT) || lx < -77) menu |= UI_LEFT;
+        if ((b & PAD_RIGHT) || lx > 77) menu |= UI_RIGHT;
         if (b & PAD_CROSS)              menu |= UI_OK;
         if (b & (PAD_CIRCLE | PAD_TRIANGLE)) menu |= UI_BACK;
         if (b & PAD_START)              menu |= UI_START;
@@ -223,6 +225,7 @@ int main(void)
         if (state == ST_PLAY) {
             jk_king_update(&k, lv, in);
             audio_set_screen(k.screen);
+            ui_stats_event((k.events & JK_EV_JUMP) != 0, (k.events & JK_EV_SPLAT) != 0, JK_DT);
         } else {
             in.left = in.right = in.jump = 0;
         }

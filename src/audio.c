@@ -17,7 +17,7 @@ extern unsigned int size_audsrv_irx;
 #define MAX_TRACKS 69
 #define MAX_PLAY   6
 
-typedef struct { int restart; float fade_in, fade_out; } track_info;
+typedef struct { int restart; float fade_in, fade_out; int music; } track_info;
 typedef struct { unsigned short id; float vol; } amb_entry;
 typedef struct { unsigned char n; amb_entry e[4]; } amb_screen;
 
@@ -32,6 +32,13 @@ typedef struct { short *data; unsigned frames; } sfx;
 typedef struct { int id; unsigned pos; } voice;
 
 static int ok;
+static int opt_master = 256, opt_music = 1, opt_sfx = 1, opt_amb = 1;
+
+void audio_set_options(float master, int music, int sfx, int ambience)
+{
+    opt_master = (int)(master * 256.0f);
+    opt_music = music; opt_sfx = sfx; opt_amb = ambience;
+}
 static int track_count, screen_count, cur_screen = -1;
 static track_info tracks[MAX_TRACKS];
 static amb_screen *screens;
@@ -110,10 +117,11 @@ int audio_init(void)
         screen_count = b[6] | b[7] << 8;
         if (track_count > MAX_TRACKS) track_count = MAX_TRACKS;
         unsigned char *p = b + 8;
-        for (int i = 0; i < track_count; i++, p += 12) {
+        for (int i = 0; i < track_count; i++, p += 16) {
             memcpy(&tracks[i].restart, p, 4);
             memcpy(&tracks[i].fade_in, p + 4, 4);
             memcpy(&tracks[i].fade_out, p + 8, 4);
+            memcpy(&tracks[i].music, p + 12, 4);
         }
         screens = calloc(screen_count, sizeof *screens);
         for (int s = 0; s < screen_count; s++) {
@@ -178,7 +186,7 @@ void audio_set_screen(int screen)
 
 void audio_play_sfx(int id)
 {
-    if (!ok || id < 0 || id >= SFX_COUNT || !sfxs[id].data) return;
+    if (!ok || !opt_sfx || id < 0 || id >= SFX_COUNT || !sfxs[id].data) return;
     for (int i = 0; i < 8; i++)
         if (voices[i].id < 0) { voices[i].id = id; voices[i].pos = 0; return; }
 }
@@ -199,7 +207,8 @@ static void mix_chunk(void)
             fclose(s->f); s->f = NULL; s->id = -1;
             continue;
         }
-        int vol = (int)(s->vol * 256.0f);
+        int on = tracks[s->id].music ? opt_music : opt_amb;
+        int vol = on ? (int)(s->vol * 256.0f) : 0;
         unsigned got = 0;
         while (got < CHUNK) {
             unsigned want = CHUNK - got;
@@ -223,7 +232,8 @@ static void mix_chunk(void)
                 if (open_path(&music, music_loop) != 0) music_on = 0;
             }
         }
-        for (unsigned j = 0; j < got * 2; j++) acc[j] += readbuf[j];
+        if (opt_music)
+            for (unsigned j = 0; j < got * 2; j++) acc[j] += readbuf[j];
     }
     for (int v = 0; v < 8; v++) {
         voice *vc = &voices[v];
@@ -234,8 +244,9 @@ static void mix_chunk(void)
             acc[j * 2 + 1] += x->data[vc->pos];
         }
         if (vc->pos >= x->frames) vc->id = -1;
+        if (!opt_sfx) { /* efectos apagados: se descartan ya mezclados abajo */ }
     }
-    for (int j = 0; j < CHUNK * 2; j++) mixbuf[j] = (short)clamp16(acc[j]);
+    for (int j = 0; j < CHUNK * 2; j++) mixbuf[j] = (short)clamp16((acc[j] * opt_master) >> 8);
 }
 
 void audio_update(void)

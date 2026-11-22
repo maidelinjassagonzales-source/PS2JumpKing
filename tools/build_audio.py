@@ -57,7 +57,8 @@ def main():
     for ai in root.iter('AmbienceInfo'):
         info[ai.findtext('name')] = (ai.findtext('restart') == 'true',
                                      float(ai.findtext('fade_in_length') or 0),
-                                     float(ai.findtext('fade_out_length') or 0))
+                                     float(ai.findtext('fade_out_length') or 0),
+                                     1 if ai.findtext('type') == 'Music' else 0)   # SoundType
     screens = []
     for sec in root.find('sections').iter('AmbienceSave'):
         tracks = [(ids[a.findtext('name')], float(a.findtext('volume') or 1))
@@ -66,9 +67,9 @@ def main():
 
     with open(os.path.join(out, 'audio', 'ambience.bin'), 'wb') as f:
         f.write(b'JKAM' + struct.pack('<HH', len(names), len(screens)))
-        for n in names:                                   # por pista: restart, fade in, fade out
-            r, fi, fo = info.get(n, (False, 0.0, 0.0))
-            f.write(struct.pack('<Iff', int(r), fi, fo))
+        for n in names:                                   # por pista: restart, fade in, fade out, es musica
+            r, fi, fo, mus = info.get(n, (False, 0.0, 0.0, 0))
+            f.write(struct.pack('<Iffi', int(r), fi, fo, mus))
         for t in screens:                                 # por pantalla: hasta 4 (pista, volumen)
             t = t[:4]
             f.write(struct.pack('<B', len(t)))

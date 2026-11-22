@@ -7,5 +7,7 @@ void audio_set_screen(int screen);  /* como AmbienceManager: para las pistas vie
 void audio_play_sfx(int id);
 void audio_update(void);
 /* Musica suelta (menu): suena intro y luego loop en bucle; NULL para parar. Calla el ambiente. */
-void audio_music(const char *intro, const char *loop);            /* llamar una vez por frame */
+void audio_music(const char *intro, const char *loop);
+/* Opciones de sonido (VolumeSlider / SoundToggle): volumen general 0..1 y tipos activos. */
+void audio_set_options(float master, int music, int sfx, int ambience);            /* llamar una vez por frame */
 #endif

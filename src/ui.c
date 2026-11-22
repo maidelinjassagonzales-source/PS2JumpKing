@@ -1,9 +1,9 @@
-/* Titulo y pausa con la composicion del original:
- * - GameTitleScreen: logo (LogoEntity: aparece en 2 s subiendo 15 px, golpe y temblor), espera,
- *   "pulsa X" centrado (PressStartEntity), parpadeo rapido 0.7 s, menu.
- * - Menus: GuiFormat de PauseManager (margen 16, separacion 8, relleno 16), marco GuiFrame de
- *   3x3 trozos, cursor a la izquierda, la opcion elegida se desplaza 5 px, fuente MenuFont.
- *   Titulo: anclado a la izquierda a y=160. Pausa: arriba a la derecha. Confirmacion: centrada. */
+/* Menus con la estructura del original (GameTitleScreen.CreateMenu, MenuFactory, PauseManager):
+ * pila de MenuSelector en cascada, GuiFormat (margen, separacion, relleno, anclaje), marco GuiFrame,
+ * cursor, flecha de volver (IconButton.CreateBackButton), casillas (ITextToggle), deslizador de
+ * volumen (ISlider/VolumeSlider) y selectores con flechas. Textos, fuentes e iconos salen de la copia
+ * del usuario (tools/build_ui.py). Lo que en PS2 no tiene sentido (graficos de PC, reasignar teclas,
+ * Taller) se muestra igual pero no hace nada (sonido de fallo). */
 #include <stdio.h>
 #include <string.h>
 #include "ui.h"
@@ -12,8 +12,14 @@
 #include "audio.h"
 #include "jk/values.h"
 
-enum { T_PRESS_START, T_CONTINUE, T_NEW_GAME, T_RESUME, T_SAVE_EXIT, T_SURE, T_YES, T_NO,
-       T_COPYRIGHT, T_SAVED, T_WORKSHOP, T_EXTRAS, T_OPTIONS, T_COUNT };
+enum {
+    T_PRESS_START, T_CONTINUE, T_NEW_GAME, T_RESUME, T_SAVE_EXIT, T_SURE, T_YES, T_NO,
+    T_COPYRIGHT, T_SAVED, T_WORKSHOP, T_EXTRAS, T_OPTIONS, T_INVENTORY, T_CREDITS, T_LICENSE,
+    T_TOTAL_STATS, T_FONT_ATTR, T_JKPLUS_ATTR, T_SESSION, T_TIME, T_JUMPS, T_FALLS,
+    T_GRAPHICS, T_CONTROLS, T_AUDIO, T_INGAME, T_TIMER_OPTS, T_QUICKLOAD, T_SHOW_TIMER,
+    T_TIMER_DEFAULT, T_TIMER_PRECISE, T_MUSIC, T_SFX, T_AMBIENCE, T_SCAN, T_BIND1, T_BIND2,
+    T_PAUSE_OPTIONS, T_COUNT
+};
 
 #define WHITE 0x80808080
 #define RED   GS_SETREG_RGBAQ(0x80, 0x00, 0x00, 0x80, 0)
@@ -21,34 +27,114 @@ enum { T_PRESS_START, T_CONTINUE, T_NEW_GAME, T_RESUME, T_SAVE_EXIT, T_SURE, T_Y
 #define GRAY  GS_SETREG_RGBAQ(0x40, 0x40, 0x40, 0x80, 0)
 
 static char text[T_COUNT][256];
-static GSTEXTURE logo, frame, cursor;
-static int have_logo, have_frame, have_cursor;
-static jk_font menufont;
+static GSTEXTURE logo, frame, cursor, back_ic, checkbox, slider_t, volume_t, arrows;
+static int have_logo, have_frame, have_cursor, have_back, have_cb, have_sl, have_vol, have_arr;
+static jk_font menufont, smallfont;
 
-/* ---- formato de menu (GuiFormat) ---- */
+/* ---- opciones y estadisticas (se guardaran en la memory card) ---- */
+static int opt_music = 1, opt_sfx = 1, opt_amb = 1, opt_quickload = 0, opt_show_timer = 0;
+static int opt_timer_mode = 0, opt_screen_mode = 0, opt_size = 1;
+static float opt_volume = 1.0f;
+static int st_attempt = 1, st_session = 1, st_jumps, st_falls;
+static float st_time;
 
-typedef struct { int bx, by, bw, bh; float ax, ay; } gui_format;
-static const gui_format PAUSE_FMT = { 0, 0, 480, 360, 1.0f, 0.0f };
+void ui_stats_event(int jumps, int falls, float dt) { st_jumps += jumps; st_falls += falls; st_time += dt; }
 
-typedef struct { int id; int selectable; u64 color; } item;
+static void apply_audio(void) { audio_set_options(opt_volume, opt_music, opt_sfx, opt_amb); }
 
-static float item_w(const item *it) { return font_width(&menufont, text[it->id]); }
-static float item_h(void) { return (float)menufont.line; }
+/* ---- elementos ---- */
+
+enum { K_BUTTON, K_INFO, K_BACK, K_TOGGLE, K_SLIDER, K_CHOICE, K_SPACE };
+enum { A_NONE, A_SUB, A_NEW_GAME, A_CONTINUE, A_RESUME, A_EXIT_CONFIRM, A_EXIT, A_FAIL };
+
+typedef struct {
+    int kind;
+    const char *txt;          /* texto ya resuelto */
+    u64 color;
+    int small;                /* MenuFontSmall */
+    int action, sub;          /* A_*, menu destino */
+    int *val;                 /* casilla o indice de selector */
+    const char *const *choices; int nchoices;
+    int h;                    /* K_SPACE */
+} item;
+
+typedef struct {
+    int bx, by, bw, bh;
+    float ax, ay;
+    int margin, elem, pad;
+} gui_format;
+
+#define MAX_ITEMS 40
+typedef struct {
+    gui_format f;
+    item it[MAX_ITEMS];
+    int n, sel, escape;
+} menu;
+
+enum { M_MAIN, M_NEWGAME, M_EXTRAS, M_INV, M_CREDITS, M_LICENSE, M_STATS, M_OPTIONS, M_GFX, M_GFX_MODE,
+       M_CTRL, M_AUDIO, M_INGAME, M_TIMER, M_PAUSE, M_PAUSE_OPT, M_CONFIRM, M_COUNT };
+static menu menus[M_COUNT];
+static int stack[8], depth;
+
+static const gui_format BASE = { 0, 0, 480, 360, 1.0f, 0.0f, 16, 8, 16 };   /* PauseManager.GUI_FORMAT */
+
+static gui_format fmt_title(int dx)
+{
+    gui_format f = BASE;
+    f.ax = 0.0f; f.by = 160; f.bx += dx;
+    return f;
+}
+
+static const jk_font *fnt(const item *it) { return it->small ? &smallfont : &menufont; }
+
+/* tamano de un texto con varias lineas */
+static void text_size(const jk_font *f, const char *s, float *w, float *h)
+{
+    char line[256];
+    *w = 0; *h = 0;
+    while (1) {
+        const char *nl = strchr(s, '\n');
+        int len = nl ? (int)(nl - s) : (int)strlen(s);
+        if (len > 255) len = 255;
+        memcpy(line, s, len); line[len] = 0;
+        float lw = font_width(f, line);
+        if (lw > *w) *w = lw;
+        *h += f->line;
+        if (!nl) break;
+        s = nl + 1;
+    }
+}
+
+static void item_size(const item *it, float *w, float *h)
+{
+    switch (it->kind) {
+    case K_BACK:   *w = back_ic.Width; *h = back_ic.Height; return;
+    case K_SPACE:  *w = 0; *h = it->h; return;
+    case K_SLIDER: *w = 8 * 3 + 50; *h = 8 * 2 + 1; return;
+    case K_TOGGLE: text_size(fnt(it), it->txt, w, h); *w += 2 + 10; return;
+    case K_CHOICE: text_size(fnt(it), it->choices[*it->val], w, h); *w += 2 * 8 + 4; return;
+    default:       text_size(fnt(it), it->txt, w, h); return;
+    }
+}
 
 /* GuiFormat.CalculateBounds */
-static void bounds(const gui_format *f, const item *it, int n, int *x, int *y, int *w, int *h)
+static void bounds(const menu *m, int *x, int *y, int *w, int *h)
 {
-    int bx = f->bx + 16, by = f->by + 16, bw = f->bw - 32, bh = f->bh - 32;
+    const gui_format *f = &m->f;
+    int bx = f->bx + f->margin, by = f->by + f->margin, bw = f->bw - 2 * f->margin, bh = f->bh - 2 * f->margin;
     float mw = 0, mh = 0;
-    for (int i = 0; i < n; i++) { if (item_w(&it[i]) > mw) mw = item_w(&it[i]); mh += item_h(); }
-    *w = (int)mw + 32;
-    *h = (int)mh + 8 * (n - 1) + 32;
+    for (int i = 0; i < m->n; i++) {
+        float iw, ih; item_size(&m->it[i], &iw, &ih);
+        if (iw > mw) mw = iw;
+        mh += ih;
+    }
+    *w = (int)mw + 2 * f->pad;
+    *h = (int)mh + f->elem * (m->n - 1) + 2 * f->pad;
     if (*w > bw) *w = bw;
     *x = (int)((float)bx + bw * f->ax) - (int)(*w * f->ax);
     *y = (int)((float)by + bh * f->ay) - (int)(*h * f->ay);
 }
 
-/* GuiFrame: esquinas de 16 px fijas, bordes y centro estirados */
 static void draw_frame(GSGLOBAL *gs, int x, int y, int w, int h, float sx, float sy)
 {
     if (!have_frame) {
@@ -63,32 +149,260 @@ static void draw_frame(GSGLOBAL *gs, int x, int y, int w, int h, float sx, float
                                       xs[i + 1] * sx, ys[j + 1] * sy, (i + 1) * c, (j + 1) * c, 5, WHITE);
 }
 
-/* MenuSelector.Draw -> GuiFormat.DrawMenuItemsWithCursor */
-static void draw_menu(GSGLOBAL *gs, const gui_format *f, const item *it, int n, int sel, float sx, float sy)
+static void blit(GSGLOBAL *gs, GSTEXTURE *t, int u, int v, int w, int h, float x, float y, float dw, float sx, float sy)
 {
-    int x, y, w, h;
-    bounds(f, it, n, &x, &y, &w, &h);
-    draw_frame(gs, x, y, w, h, sx, sy);
-    float off = 16.0f;
-    for (int i = 0; i < n; i++) {
-        float tx = x + 16.0f + (i == sel ? 5.0f : 0.0f);
-        font_draw(gs, &menufont, text[it[i].id], tx, y + off, sx, sy, it[i].color);
-        if (i == sel && it[i].selectable && have_cursor)
-            gsKit_prim_sprite_texture(gs, &cursor, x * sx, (y + off) * sy, 0, 0,
-                                      (x + cursor.Width) * sx, (y + off + cursor.Height) * sy,
-                                      cursor.Width, cursor.Height, 6, WHITE);
-        off += item_h() + 8.0f;
+    gsKit_prim_sprite_texture(gs, t, x * sx, y * sy, u, v, (x + dw) * sx, (y + h) * sy, u + w, v + h, 6, WHITE);
+}
+
+static void draw_text_ml(GSGLOBAL *gs, const jk_font *f, const char *s, float x, float y, float sx, float sy, u64 c)
+{
+    char line[256];
+    while (1) {
+        const char *nl = strchr(s, '\n');
+        int len = nl ? (int)(nl - s) : (int)strlen(s);
+        if (len > 255) len = 255;
+        memcpy(line, s, len); line[len] = 0;
+        font_draw(gs, f, line, x, y, sx, sy, c);
+        y += f->line;
+        if (!nl) break;
+        s = nl + 1;
     }
 }
 
-static int move_sel(const item *it, int n, int sel, int dir)
+static void draw_item(GSGLOBAL *gs, const item *it, float x, float y, float sx, float sy)
 {
-    for (int k = 0; k < n; k++) {
-        sel = (sel + dir + n) % n;
-        if (it[sel].selectable) break;
+    float w, h;
+    switch (it->kind) {
+    case K_BACK:
+        if (have_back) blit(gs, &back_ic, 0, 0, back_ic.Width, back_ic.Height, x, y, back_ic.Width, sx, sy);
+        break;
+    case K_TOGGLE:                                         /* texto + casilla centrada en la linea */
+        text_size(fnt(it), it->txt, &w, &h);
+        draw_text_ml(gs, fnt(it), it->txt, x, y, sx, sy, it->color);
+        if (have_cb) blit(gs, &checkbox, *it->val ? 10 : 0, 0, 10, 10, x + w + 2, y + h / 2 - 5, 10, sx, sy);
+        break;
+    case K_SLIDER: {                                       /* icono de volumen + barra de 50 px */
+        y += 4;
+        int lvl = opt_volume <= 0.0f ? 0 : opt_volume < 0.34f ? 1 : opt_volume < 0.67f ? 2 : 3;
+        int vw = volume_t.Width / 4;
+        if (have_vol) blit(gs, &volume_t, lvl * vw, 0, vw, volume_t.Height, x, y, vw, sx, sy);
+        x += vw;
+        if (have_sl) {
+            blit(gs, &slider_t, 0, 0, 8, 8, x, y, 8, sx, sy);
+            blit(gs, &slider_t, 8, 0, 8, 8, x + 8, y, 50, sx, sy);
+            blit(gs, &slider_t, 16, 0, 8, 8, x + 58, y, 8, sx, sy);
+            blit(gs, &slider_t, 24, 0, 8, 8, x + 8 + 50.0f * opt_volume - 4, y, 8, sx, sy);
+        }
+        break;
     }
-    audio_play_sfx(SFX_SELECT);
-    return sel;
+    case K_CHOICE: {                                       /* < valor > */
+        const char *v = it->choices[*it->val];
+        if (have_arr) blit(gs, &arrows, 0, 0, 8, 7, x, y + 4, 8, sx, sy);
+        font_draw(gs, fnt(it), v, x + 10, y, sx, sy, GRAY);
+        text_size(fnt(it), v, &w, &h);
+        if (have_arr) blit(gs, &arrows, 8, 0, 8, 7, x + 12 + w, y + 4, 8, sx, sy);
+        break;
+    }
+    case K_SPACE:
+        break;
+    default:
+        draw_text_ml(gs, fnt(it), it->txt, x, y, sx, sy, it->color);
+    }
+}
+
+static int selectable(const item *it) { return it->kind != K_INFO && it->kind != K_SPACE; }
+
+/* MenuSelector.Draw -> GuiFormat.DrawMenuItemsWithCursor */
+static void draw_menu(GSGLOBAL *gs, const menu *m, float sx, float sy)
+{
+    int x, y, w, h;
+    bounds(m, &x, &y, &w, &h);
+    draw_frame(gs, x, y, w, h, sx, sy);
+    float off = m->f.pad;
+    for (int i = 0; i < m->n; i++) {
+        float iw, ih;
+        item_size(&m->it[i], &iw, &ih);
+        int sel = i == m->sel && selectable(&m->it[i]);
+        draw_item(gs, &m->it[i], x + m->f.pad + (sel ? 5 : 0), y + off, sx, sy);
+        if (sel && have_cursor)
+            blit(gs, &cursor, 0, 0, cursor.Width, cursor.Height, x, y + off, cursor.Width, sx, sy);
+        off += ih + m->f.elem;
+    }
+}
+
+/* ---- construccion de los menus ---- */
+
+static item *add(menu *m, item it) { if (m->n < MAX_ITEMS) m->it[m->n++] = it; return &m->it[m->n - 1]; }
+static item btn(int t, int action, int sub) { return (item){ K_BUTTON, text[t], WHITE, 0, action, sub, 0, 0, 0, 0 }; }
+static item info(const char *s, u64 c, int small) { return (item){ K_INFO, s, c, small, A_NONE, 0, 0, 0, 0, 0 }; }
+static item toggle(int t, int *v) { return (item){ K_TOGGLE, text[t], WHITE, 0, A_NONE, 0, v, 0, 0, 0 }; }
+static void finish(menu *m) { if (m->escape) add(m, (item){ K_BACK, "", WHITE, 0, A_NONE, 0, 0, 0, 0, 0 }); }
+
+static char credit_lines[64][128];
+static int credit_count;
+static char stat_lines[4][96];
+static const char *const MODES[] = { "Borderless", "Windowed", "Fullscreen" };
+static const char *const SIZES[] = { "x1", "x2", "x3" };
+static char timer_names[2][64];
+static const char *timer_choices[2];
+static char bind_lines[8][64];
+
+/* "Fuente: {0}" -> sustituye {0}/{1}; si no hay hueco, concatena */
+static void fmt2(char *out, int sz, const char *t, const char *a, const char *b)
+{
+    char tmp[256]; tmp[0] = 0;
+    const char *p = t;
+    int used_a = 0;
+    while (*p && (int)strlen(tmp) < sz - 16) {
+        if (p[0] == '{' && p[1] == '0' && p[2] == '}') { strcat(tmp, a); p += 3; used_a = 1; continue; }
+        if (p[0] == '{' && p[1] == '1' && p[2] == '}' && b) { strcat(tmp, b); p += 3; continue; }
+        int l = strlen(tmp); tmp[l] = *p++; tmp[l + 1] = 0;
+    }
+    if (!used_a) { strcat(tmp, " "); strcat(tmp, a); }
+    strncpy(out, tmp, sz - 1); out[sz - 1] = 0;
+}
+
+static void update_stats_text(void)
+{
+    char a[16], b[16];
+    snprintf(a, sizeof a, "%d", st_attempt); snprintf(b, sizeof b, "%d", st_session);
+    fmt2(stat_lines[0], sizeof stat_lines[0], text[T_SESSION], a, b);
+    int ms = (int)(st_time * 1000.0f), hh = ms / 3600000, mm = ms / 60000 % 60, ss = ms / 1000 % 60;
+    snprintf(stat_lines[1], sizeof stat_lines[1], "%s %dh %dm %ds %dms", text[T_TIME], hh, mm, ss, ms % 1000);
+    snprintf(a, sizeof a, "%d", st_jumps);
+    fmt2(stat_lines[2], sizeof stat_lines[2], text[T_JUMPS], a, 0);
+    snprintf(a, sizeof a, "%d", st_falls);
+    fmt2(stat_lines[3], sizeof stat_lines[3], text[T_FALLS], a, 0);
+}
+
+/* Creditos: nombre (MenuFont) y cargos partidos por comas al ancho (MenuFontSmall), sangrados */
+static void build_credits(menu *m)
+{
+    int n;
+    unsigned char *b = assets_load("credits.bin", &n);
+    if (!b || memcmp(b, "JKCR", 4) != 0) return;
+    int count = b[4] | b[5] << 8, p = 6;
+    float maxw = 480 - 2 * 8 - 2 * 16 - 8;
+    for (int i = 0; i < count && credit_count < 60; i++) {
+        int l = b[p++];
+        char *name = credit_lines[credit_count++];
+        memcpy(name, b + p, l); name[l] = 0; p += l;
+        add(m, info(name, GRAY, 0));
+        l = b[p++];
+        char role[256]; memcpy(role, b + p, l); role[l] = 0; p += l;
+        /* TextInfo.CreateFittedInfo: cortar en comas */
+        char *s = role;
+        while (*s && credit_count < 60) {
+            char *line = credit_lines[credit_count];
+            strcpy(line, "  ");
+            char *cut = s, *best = 0;
+            while (1) {
+                char *c = strchr(cut, ',');
+                int len = c ? (int)(c - s + 1) : (int)strlen(s);
+                char tryb[128]; snprintf(tryb, sizeof tryb, "  %.*s", len, s);
+                if (font_width(&smallfont, tryb) > maxw && best) break;
+                best = c ? c + 1 : s + strlen(s);
+                if (!c) break;
+                cut = c + 1;
+            }
+            int len = (int)(best - s);
+            snprintf(line + 2, 126, "%.*s", len, s);
+            credit_count++;
+            add(m, info(line, GRAY, 1));
+            s = best;
+            while (*s == ' ') s++;
+        }
+        add(m, (item){ K_SPACE, "", 0, 0, 0, 0, 0, 0, 0, 4 });
+    }
+}
+
+static void build_menus(void)
+{
+    memset(menus, 0, sizeof menus);
+    for (int i = 0; i < M_COUNT; i++) { menus[i].escape = 1; menus[i].f = fmt_title(0); }
+
+    menu *m = &menus[M_MAIN]; m->escape = 0;                 /* se llena en ui_title_enter */
+
+    m = &menus[M_NEWGAME]; m->f = fmt_title(60);
+    add(m, btn(T_NEW_GAME, A_NEW_GAME, 0)); finish(m);
+
+    m = &menus[M_EXTRAS]; m->f = fmt_title(60);
+    add(m, btn(T_INVENTORY, A_SUB, M_INV));
+    add(m, btn(T_CREDITS, A_SUB, M_CREDITS));
+    add(m, btn(T_LICENSE, A_SUB, M_LICENSE));
+    add(m, btn(T_TOTAL_STATS, A_SUB, M_STATS));
+    finish(m);
+
+    m = &menus[M_INV]; m->f = BASE; m->f.elem = 1; finish(m);   /* sin objetos todavia */
+
+    m = &menus[M_CREDITS]; m->f = BASE; m->f.margin = 8; m->f.elem = 0;
+    build_credits(m); finish(m);
+
+    m = &menus[M_LICENSE]; m->f = fmt_title(120);
+    add(m, info(text[T_FONT_ATTR], GRAY, 0));
+    add(m, info(text[T_JKPLUS_ATTR], GRAY, 0));
+    finish(m);
+
+    m = &menus[M_STATS]; m->f = fmt_title(120);
+    for (int i = 0; i < 4; i++) add(m, info(stat_lines[i], GRAY, 0));
+    finish(m);
+
+    m = &menus[M_OPTIONS]; m->f = fmt_title(60);
+    add(m, btn(T_GRAPHICS, A_SUB, M_GFX));
+    add(m, btn(T_CONTROLS, A_SUB, M_CTRL));
+    add(m, btn(T_AUDIO, A_SUB, M_AUDIO));
+    add(m, btn(T_INGAME, A_SUB, M_INGAME));
+    finish(m);
+
+    m = &menus[M_GFX]; m->f = fmt_title(120);
+    add(m, (item){ K_CHOICE, "", WHITE, 0, A_NONE, 0, &opt_screen_mode, MODES, 3, 0 });
+    add(m, (item){ K_CHOICE, "", WHITE, 0, A_NONE, 0, &opt_size, SIZES, 3, 0 });
+    finish(m);
+
+    m = &menus[M_CTRL]; m->f = BASE; m->f.ax = 0.0f; m->f.bx = 16;
+    add(m, (item){ K_BUTTON, text[T_SCAN], WHITE, 1, A_FAIL, 0, 0, 0, 0, 0 });
+    add(m, (item){ K_BUTTON, text[T_BIND1], WHITE, 1, A_FAIL, 0, 0, 0, 0, 0 });
+    add(m, (item){ K_BUTTON, text[T_BIND2], WHITE, 1, A_FAIL, 0, 0, 0, 0, 0 });
+    {
+        static const char *const keys[8][2] = { { "Up", "Arriba" }, { "Down", "Abajo" }, { "Left", "Izquierda" },
+            { "Right", "Derecha" }, { "Jump", "X" }, { "Confirm", "X" }, { "Cancel", "Circulo" }, { "Pause", "Start" } };
+        for (int i = 0; i < 8; i++) {
+            snprintf(bind_lines[i], sizeof bind_lines[i], "%s : %s", keys[i][0], keys[i][1]);
+            add(m, info(bind_lines[i], GRAY, 1));
+        }
+    }
+    finish(m);
+
+    m = &menus[M_AUDIO]; m->f = fmt_title(120);
+    add(m, (item){ K_SLIDER, "", WHITE, 0, A_NONE, 0, 0, 0, 0, 0 });
+    add(m, toggle(T_MUSIC, &opt_music));
+    add(m, toggle(T_SFX, &opt_sfx));
+    add(m, toggle(T_AMBIENCE, &opt_amb));
+    finish(m);
+
+    m = &menus[M_INGAME]; m->f = fmt_title(120);
+    add(m, btn(T_TIMER_OPTS, A_SUB, M_TIMER));
+    add(m, toggle(T_QUICKLOAD, &opt_quickload));
+    finish(m);
+
+    strcpy(timer_names[0], text[T_TIMER_DEFAULT]); strcpy(timer_names[1], text[T_TIMER_PRECISE]);
+    timer_choices[0] = timer_names[0]; timer_choices[1] = timer_names[1];
+    m = &menus[M_TIMER]; m->f = fmt_title(180);
+    add(m, toggle(T_SHOW_TIMER, &opt_show_timer));
+    add(m, (item){ K_CHOICE, "", WHITE, 0, A_NONE, 0, &opt_timer_mode, timer_choices, 2, 0 });
+    finish(m);
+
+    /* pausa: arriba a la derecha (PauseManager) */
+    m = &menus[M_PAUSE]; m->f = BASE; m->escape = 0;
+    add(m, btn(T_RESUME, A_RESUME, 0));
+    add(m, btn(T_INVENTORY, A_SUB, M_INV));
+    add(m, btn(T_PAUSE_OPTIONS, A_SUB, M_PAUSE_OPT));
+    add(m, btn(T_SAVE_EXIT, A_EXIT_CONFIRM, 0));
+    m = &menus[M_PAUSE_OPT]; *m = menus[M_OPTIONS]; m->f = BASE; m->f.bx = -60;
+    m = &menus[M_CONFIRM]; m->f = BASE; m->f.ax = 0.5f; m->f.ay = 0.5f; m->f.bx = 32;
+    add(m, info(text[T_SURE], RED, 0));
+    add(m, btn(T_NO, A_NONE, -1));
+    add(m, btn(T_YES, A_EXIT, 0));
 }
 
 int ui_init(GSGLOBAL *gs)
@@ -103,40 +417,106 @@ int ui_init(GSGLOBAL *gs)
             memcpy(text[i], b + p, l); text[i][l] = 0; p += l;
         }
     }
-    memset(&logo, 0, sizeof logo); memset(&frame, 0, sizeof frame); memset(&cursor, 0, sizeof cursor);
-    have_logo = assets_t8(gs, "title.t8", &logo, 0) == 0;
-    have_frame = assets_t8(gs, "frame.t8", &frame, 0) == 0;
-    have_cursor = assets_t8(gs, "cursor.t8", &cursor, 0) == 0;
+    GSTEXTURE *texs[] = { &logo, &frame, &cursor, &back_ic, &checkbox, &slider_t, &volume_t, &arrows };
+    int *have[] = { &have_logo, &have_frame, &have_cursor, &have_back, &have_cb, &have_sl, &have_vol, &have_arr };
+    const char *names[] = { "title.t8", "frame.t8", "cursor.t8", "back.t8", "checkbox.t8", "slider.t8", "volume.t8", "arrows.t8" };
+    for (int i = 0; i < 8; i++) { memset(texs[i], 0, sizeof *texs[i]); *have[i] = assets_t8(gs, names[i], texs[i], 0) == 0; }
     font_load(gs, &menufont, "menufont");
+    font_load(gs, &smallfont, "smallfont");
+    update_stats_text();
+    build_menus();
+    apply_audio();
     return 0;
+}
+
+/* ---- navegacion ---- */
+
+static menu *top(void) { return &menus[stack[depth - 1]]; }
+
+static void push(int id)
+{
+    if (depth < 8) { stack[depth++] = id; menu *m = &menus[id]; m->sel = 0;
+        while (m->sel < m->n - 1 && !selectable(&m->it[m->sel])) m->sel++; }
+    audio_play_sfx(SFX_SELECT);
+}
+
+static void pop(void) { if (depth > 1) { depth--; audio_play_sfx(SFX_SELECT); } }
+
+static void move(menu *m, int dir)
+{
+    for (int k = 0; k < m->n; k++) {
+        m->sel = (m->sel + dir + m->n) % m->n;
+        if (selectable(&m->it[m->sel])) break;
+    }
+    audio_play_sfx(SFX_SELECT);
+}
+
+/* devuelve una accion A_* que debe atender quien llama */
+static int menu_input(int pressed)
+{
+    menu *m = top();
+    item *it = &m->it[m->sel];
+    if (pressed & UI_UP) move(m, -1);
+    if (pressed & UI_DOWN) move(m, 1);
+    if (pressed & (UI_LEFT | UI_RIGHT)) {
+        int d = (pressed & UI_RIGHT) ? 1 : -1;
+        if (it->kind == K_SLIDER) {
+            opt_volume += d * 0.1f;
+            if (opt_volume < 0) opt_volume = 0;
+            if (opt_volume > 1) opt_volume = 1;
+            apply_audio(); audio_play_sfx(SFX_SELECT);
+        } else if (it->kind == K_CHOICE) {
+            *it->val = (*it->val + d + it->nchoices) % it->nchoices;
+            audio_play_sfx(SFX_SELECT);
+        }
+    }
+    if (pressed & UI_BACK) { if (m->escape) pop(); return A_NONE; }
+    if (!(pressed & UI_OK)) return A_NONE;
+    switch (it->kind) {
+    case K_BACK: pop(); return A_NONE;
+    case K_TOGGLE: *it->val = !*it->val; apply_audio(); audio_play_sfx(SFX_SELECT); return A_NONE;
+    case K_CHOICE: *it->val = (*it->val + 1) % it->nchoices; audio_play_sfx(SFX_SELECT); return A_NONE;
+    case K_BUTTON:
+        if (it->action == A_SUB) {
+            if (it->sub == M_STATS) update_stats_text();
+            push(it->sub);
+            return A_NONE;
+        }
+        if (it->action == A_FAIL) { audio_play_sfx(SFX_MENU_FAIL); return A_NONE; }
+        if (it->sub == -1) { pop(); return A_NONE; }
+        return it->action;
+    }
+    return A_NONE;
+}
+
+static void draw_stack(GSGLOBAL *gs, float sx, float sy)
+{
+    for (int i = 0; i < depth; i++) draw_menu(gs, &menus[stack[i]], sx, sy);
 }
 
 /* ---- titulo ---- */
 
 enum { P_LOGO, P_WAIT, P_PRESS, P_PRESSED, P_MENU };
-static int phase, t, logo_frames, shake_tick, shake_skip, shake_mag, hit_played;
-static int has_save, title_sel;
-static item title_items[5];
-static int title_n;
+static int phase, t, logo_frames, shake_tick, shake_skip, shake_mag, hit_played, has_save;
 
 void ui_title_enter(int save)
 {
     phase = P_LOGO; t = 0; logo_frames = 0;
     shake_tick = -1; shake_skip = 0; shake_mag = 0; hit_played = 0;
     has_save = save;
-    title_n = 0;
-    /* GameTitleScreen.CreateMenu: Continuar (si hay partida), Nueva partida en verde, Taller
-     * (enlace verde), Extras, Opciones. Salir solo existe en PC. */
-    if (has_save) title_items[title_n++] = (item){ T_CONTINUE, 1, WHITE };
-    title_items[title_n++] = (item){ T_NEW_GAME, 1, GREEN };
-    title_items[title_n++] = (item){ T_WORKSHOP, 1, GREEN };
-    title_items[title_n++] = (item){ T_EXTRAS, 1, WHITE };
-    title_items[title_n++] = (item){ T_OPTIONS, 1, WHITE };
-    title_sel = 0;
+    /* GameTitleScreen.CreateMenu: Continuar (si hay partida), Nueva partida y Taller en verde,
+     * Extras, Opciones. Salir solo existe en PC. */
+    menu *m = &menus[M_MAIN];
+    m->n = 0; m->sel = 0;
+    if (has_save) add(m, btn(T_CONTINUE, A_CONTINUE, 0));
+    item *ng = add(m, btn(T_NEW_GAME, A_SUB, M_NEWGAME)); ng->color = GREEN;
+    item *ws = add(m, btn(T_WORKSHOP, A_FAIL, 0)); ws->color = GREEN;
+    add(m, btn(T_EXTRAS, A_SUB, M_EXTRAS));
+    add(m, btn(T_OPTIONS, A_SUB, M_OPTIONS));
+    stack[0] = M_MAIN; depth = 1;
     audio_music("menu_intro", "menu_loop");
 }
 
-/* Shake: magnitud = tick con signo alterno, baja 1 cada 4 frames desde 10 */
 static void shake_update(void)
 {
     if (shake_tick < 0) return;
@@ -149,39 +529,34 @@ static void shake_update(void)
 int ui_title_update(int pressed)
 {
     t++;
-    /* logo: 2 s subiendo 0.125 px/frame, luego golpe + temblor */
     if (logo_frames < 120) {
         logo_frames++;
         if (pressed & (UI_OK | UI_START)) logo_frames = 120;
         if (logo_frames == 120 && !hit_played) { hit_played = 1; audio_play_sfx(SFX_TITLE_HIT); shake_tick = 10; }
     }
     shake_update();
-
     switch (phase) {
-    case P_LOGO:                                    /* PlayLogo: hasta 2.5 s o pulsar */
+    case P_LOGO:
         if (t >= 150 || (pressed & (UI_OK | UI_START))) { phase = P_WAIT; t = 0; }
         break;
-    case P_WAIT:                                    /* 1 s o pulsar */
+    case P_WAIT:
         if (t >= 60 || (pressed & (UI_OK | UI_START))) { phase = P_PRESS; t = 0; }
         break;
     case P_PRESS:
         if (pressed & (UI_OK | UI_START)) { phase = P_PRESSED; t = 0; audio_play_sfx(SFX_PRESS_START); }
         break;
-    case P_PRESSED:                                 /* parpadeo rapido 0.7 s */
+    case P_PRESSED:
         if (t >= 42) { phase = P_MENU; t = 0; }
         break;
-    case P_MENU:
-        if (pressed & UI_UP)   title_sel = move_sel(title_items, title_n, title_sel, -1);
-        if (pressed & UI_DOWN) title_sel = move_sel(title_items, title_n, title_sel, 1);
-        if (pressed & UI_OK) {
-            int id = title_items[title_sel].id;
-            if (id == T_CONTINUE || id == T_NEW_GAME) {
-                audio_music(NULL, NULL);
-                return id == T_CONTINUE ? UI_CONTINUE : UI_NEW_GAME;
-            }
-            audio_play_sfx(SFX_MENU_FAIL);       /* Taller/Extras/Opciones: aun no portados */
+    case P_MENU: {
+        int a = menu_input(pressed);
+        if (a == A_NEW_GAME || a == A_CONTINUE) {
+            audio_music(NULL, NULL);
+            if (a == A_NEW_GAME) { st_jumps = st_falls = 0; st_time = 0; }
+            return a == A_CONTINUE ? UI_CONTINUE : UI_NEW_GAME;
         }
         break;
+    }
     }
     return UI_NONE;
 }
@@ -189,78 +564,47 @@ int ui_title_update(int pressed)
 void ui_title_draw(GSGLOBAL *gs, float sx, float sy)
 {
     if (have_logo) {
-        float py = 120.0f - 0.125f * logo_frames + shake_mag;     /* MoveUp + Shake */
-        float alpha = logo_frames >= 120 ? 1.0f : logo_frames / 120.0f;   /* FadeNode 2 s */
+        float py = 120.0f - 0.125f * logo_frames + shake_mag;
+        float alpha = logo_frames >= 120 ? 1.0f : logo_frames / 120.0f;
         int a = (int)(alpha * 128.0f);
         float x = 240.0f - logo.Width / 2, y = (float)(int)py - logo.Height / 2;
         gsKit_prim_sprite_texture(gs, &logo, x * sx, y * sy, 0, 0, (x + logo.Width) * sx, (y + logo.Height) * sy,
                                   logo.Width, logo.Height, 5, GS_SETREG_RGBAQ(0x80, 0x80, 0x80, a, 0));
     }
     int show = 0;
-    if (phase == P_PRESS)   show = (t / 30) % 2 == 0;      /* 0.5 s */
-    if (phase == P_PRESSED) show = (t / 4) % 2 == 0;       /* 1/15 s */
+    if (phase == P_PRESS)   show = (t / 30) % 2 == 0;
+    if (phase == P_PRESSED) show = (t / 4) % 2 == 0;
     if (show) {
         float w = font_width(&menufont, text[T_PRESS_START]);
         font_draw(gs, &menufont, text[T_PRESS_START], 240.0f - w / 2.0f, 230.0f - menufont.line / 2.0f, sx, sy, WHITE);
     }
     if (phase == P_MENU) {
-        /* TextHelper.DrawString(pos, anclaje): se resta anclaje * tamano */
-        float cw = font_width(&menufont, text[T_COPYRIGHT]);
-        (void)cw;
         font_draw(gs, &menufont, text[T_COPYRIGHT], 337.0f, 30.0f + 0.5f * menufont.line, sx, sy, GRAY);
         float sw = font_width(&menufont, text[T_SAVED]);
         font_draw(gs, &menufont, text[T_SAVED], 462.0f - sw, 352.0f - menufont.line, sx, sy, GRAY);
-        gui_format f = PAUSE_FMT;
-        f.ax = 0.0f;
-        f.by = 160;
-        draw_menu(gs, &f, title_items, title_n, title_sel, sx, sy);
+        draw_stack(gs, sx, sy);
     }
 }
 
 /* ---- pausa ---- */
 
-static int pause_sel, confirm, confirm_sel;
-static const item pause_items[2] = { { T_RESUME, 1, WHITE }, { T_SAVE_EXIT, 1, WHITE } };
-static item confirm_items[3];
-
 void ui_pause_enter(void)
 {
-    pause_sel = 0; confirm = 0;
+    stack[0] = M_PAUSE; depth = 1; menus[M_PAUSE].sel = 0;
     audio_play_sfx(SFX_MENU_OPEN);
 }
 
 int ui_pause_update(int pressed)
 {
-    if (confirm) {
-        if (pressed & UI_UP)   confirm_sel = move_sel(confirm_items, 3, confirm_sel, -1);
-        if (pressed & UI_DOWN) confirm_sel = move_sel(confirm_items, 3, confirm_sel, 1);
-        if (pressed & UI_BACK) confirm = 0;
-        if (pressed & UI_OK) {
-            if (confirm_items[confirm_sel].id == T_YES) return UI_EXIT_TO_TITLE;
-            confirm = 0;
-        }
-        return UI_NONE;
-    }
-    if (pressed & (UI_START | UI_BACK)) return UI_RESUME;
-    if (pressed & UI_UP)   pause_sel = move_sel(pause_items, 2, pause_sel, -1);
-    if (pressed & UI_DOWN) pause_sel = move_sel(pause_items, 2, pause_sel, 1);
-    if (pressed & UI_OK) {
-        if (pause_sel == 0) return UI_RESUME;
-        /* CreateExitToMenu: "seguro?" en rojo, No, Si */
-        confirm_items[0] = (item){ T_SURE, 0, RED };
-        confirm_items[1] = (item){ T_NO, 1, WHITE };
-        confirm_items[2] = (item){ T_YES, 1, WHITE };
-        confirm = 1; confirm_sel = 1;
-    }
+    if (depth == 1 && (pressed & (UI_START | UI_BACK))) return UI_RESUME;
+    int a = menu_input(pressed);
+    if (a == A_RESUME) return UI_RESUME;
+    if (a == A_EXIT_CONFIRM) { push(M_CONFIRM); menus[M_CONFIRM].sel = 1; }
+    if (a == A_EXIT) return UI_EXIT_TO_TITLE;
     return UI_NONE;
 }
 
 void ui_pause_draw(GSGLOBAL *gs, float sx, float sy)
 {
-    draw_menu(gs, &PAUSE_FMT, pause_items, 2, pause_sel, sx, sy);
-    if (confirm) {
-        gui_format f = PAUSE_FMT;
-        f.ax = 0.5f; f.ay = 0.5f; f.bx = 32;
-        draw_menu(gs, &f, confirm_items, 3, confirm_sel, sx, sy);
-    }
+    draw_stack(gs, sx, sy);
 }

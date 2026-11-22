@@ -4,7 +4,7 @@
 #define UI_H
 #include <gsKit.h>
 
-enum { UI_UP = 1, UI_DOWN = 2, UI_OK = 4, UI_BACK = 8, UI_START = 16 };
+enum { UI_UP = 1, UI_DOWN = 2, UI_OK = 4, UI_BACK = 8, UI_START = 16, UI_LEFT = 32, UI_RIGHT = 64 };
 enum { UI_NONE, UI_NEW_GAME, UI_CONTINUE, UI_RESUME, UI_EXIT_TO_TITLE };
 
 int  ui_init(GSGLOBAL *gs);
@@ -14,4 +14,6 @@ void ui_title_draw(GSGLOBAL *gs, float sx, float sy);
 void ui_pause_enter(void);
 int  ui_pause_update(int pressed);                 /* UI_RESUME / UI_EXIT_TO_TITLE */
 void ui_pause_draw(GSGLOBAL *gs, float sx, float sy);
+/* estadisticas de la sesion (saltos, caidas, tiempo) */
+void ui_stats_event(int jumps, int falls, float dt);
 #endif
