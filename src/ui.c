@@ -19,7 +19,7 @@ enum {
     T_TOTAL_STATS, T_FONT_ATTR, T_JKPLUS_ATTR, T_SESSION, T_TIME, T_JUMPS, T_FALLS,
     T_GRAPHICS, T_CONTROLS, T_AUDIO, T_INGAME, T_TIMER_OPTS, T_QUICKLOAD, T_SHOW_TIMER,
     T_TIMER_DEFAULT, T_TIMER_PRECISE, T_MUSIC, T_SFX, T_AMBIENCE, T_SCAN, T_BIND1, T_BIND2,
-    T_PAUSE_OPTIONS, T_COUNT
+    T_PAUSE_OPTIONS, T_INTRO, T_COUNT
 };
 
 #define WHITE 0x80808080
@@ -28,8 +28,8 @@ enum {
 #define GRAY  GS_SETREG_RGBAQ(0x40, 0x40, 0x40, 0x80, 0)
 
 static char text[T_COUNT][256];
-static GSTEXTURE logo, frame, cursor, back_ic, checkbox, slider_t, volume_t, arrows;
-static int have_logo, have_frame, have_cursor, have_back, have_cb, have_sl, have_vol, have_arr;
+static GSTEXTURE logo, frame, cursor, back_ic, checkbox, slider_t, volume_t, arrows, nexile;
+static int have_logo, have_frame, have_cursor, have_back, have_cb, have_sl, have_vol, have_arr, have_nexile;
 static jk_font menufont, smallfont;
 
 /* ---- opciones y estadisticas (se guardaran en la memory card) ---- */
@@ -471,10 +471,10 @@ int ui_init(GSGLOBAL *gs)
             memcpy(text[i], b + p, l); text[i][l] = 0; p += l;
         }
     }
-    GSTEXTURE *texs[] = { &logo, &frame, &cursor, &back_ic, &checkbox, &slider_t, &volume_t, &arrows };
-    int *have[] = { &have_logo, &have_frame, &have_cursor, &have_back, &have_cb, &have_sl, &have_vol, &have_arr };
-    const char *names[] = { "title.t8", "frame.t8", "cursor.t8", "back.t8", "checkbox.t8", "slider.t8", "volume.t8", "arrows.t8" };
-    for (int i = 0; i < 8; i++) { memset(texs[i], 0, sizeof *texs[i]); *have[i] = assets_t8(gs, names[i], texs[i], 0) == 0; }
+    GSTEXTURE *texs[] = { &logo, &frame, &cursor, &back_ic, &checkbox, &slider_t, &volume_t, &arrows, &nexile };
+    int *have[] = { &have_logo, &have_frame, &have_cursor, &have_back, &have_cb, &have_sl, &have_vol, &have_arr, &have_nexile };
+    const char *names[] = { "title.t8", "frame.t8", "cursor.t8", "back.t8", "checkbox.t8", "slider.t8", "volume.t8", "arrows.t8", "nexile.t8" };
+    for (int i = 0; i < 9; i++) { memset(texs[i], 0, sizeof *texs[i]); *have[i] = assets_t8(gs, names[i], texs[i], 0) == 0; }
     font_load(gs, &menufont, "menufont");
     font_load(gs, &smallfont, "smallfont");
     update_stats_text();
@@ -646,6 +646,74 @@ void ui_title_draw(GSGLOBAL *gs, float sx, float sy)
             draw_menu(gs, &box, sx, sy);
         }
         draw_stack(gs, sx, sy);
+    }
+}
+
+/* ---- cinematicas ---- */
+
+static int logo_t;
+
+/* NexileLogoScreen: logo centrado sobre blanco, 2 s o hasta pulsar */
+int ui_logo_update(int pressed)
+{
+    logo_t++;
+    return logo_t >= 120 || (logo_t > 10 && (pressed & (UI_OK | UI_START)));
+}
+
+void ui_logo_draw(GSGLOBAL *gs, float sx, float sy)
+{
+    gsKit_prim_sprite(gs, 0, 0, JK_SCREEN_W * sx, JK_SCREEN_H * sy, 4, GS_SETREG_RGBAQ(0x80, 0x80, 0x80, 0x80, 0));
+    if (have_nexile) {
+        float x = 240.0f - nexile.Width / 2.0f, y = 180.0f - nexile.Height / 2.0f;
+        gsKit_prim_sprite_texture(gs, &nexile, x * sx, y * sy, 0, 0, (x + nexile.Width) * sx, (y + nexile.Height) * sy,
+                                  nexile.Width, nexile.Height, 5, WHITE);
+    }
+}
+
+/* IntroState: musica de apertura, 1 s, texto de la leyenda (aparece 1 s, queda 3 s, se va 1 s),
+ * la pantalla negra se aclara en 1 s y 2 s de pausa. Con carga rapida: tiempos cortos. */
+static float it_t;
+static int it_fast;
+
+void ui_intro_enter(void)
+{
+    it_t = 0;
+    it_fast = opt_quickload;
+    if (!it_fast) audio_music("opening", "");
+}
+
+static float it_pre(void)   { return it_fast ? 0.0f : 1.0f; }
+static float it_in(void)    { return it_fast ? 0.5f : 1.0f; }
+static float it_stay(void)  { return it_fast ? 1.0f : 3.0f; }
+static float it_out(void)   { return it_fast ? 0.5f : 1.0f; }
+static float it_text_end(void) { return it_pre() + it_in() + it_stay() + it_out(); }
+static float it_end(void)   { return it_text_end() + 1.0f + (it_fast ? 0.0f : 2.0f); }
+
+int ui_intro_update(void)
+{
+    it_t += JK_DT;
+    return it_t >= it_end();
+}
+
+void ui_intro_draw(GSGLOBAL *gs, float sx, float sy)
+{
+    /* fundido negro encima del juego: opaco hasta que acaba el texto, luego se aclara en 1 s */
+    float black = 1.0f;
+    if (it_t > it_text_end()) black = 1.0f - (it_t - it_text_end());
+    if (black < 0) black = 0;
+    if (black > 0)
+        gsKit_prim_sprite(gs, 0, 0, JK_SCREEN_W * sx, JK_SCREEN_H * sy, 6,
+                          GS_SETREG_RGBAQ(0, 0, 0, (int)(black * 128.0f), 0));
+    /* texto centrado (FadeTextEntity) */
+    float t = it_t - it_pre(), a = 0;
+    if (t >= 0 && t < it_in()) a = t / it_in();
+    else if (t >= it_in() && t < it_in() + it_stay()) a = 1;
+    else if (t >= it_in() + it_stay() && t < it_in() + it_stay() + it_out()) a = 1 - (t - it_in() - it_stay()) / it_out();
+    if (a > 0) {
+        float w, h;
+        text_size(&menufont, text[T_INTRO], &w, &h);
+        u64 c = GS_SETREG_RGBAQ(0x80, 0x80, 0x80, (int)(a * 128.0f), 0);
+        draw_text_ml(gs, &menufont, text[T_INTRO], 240.0f - w / 2.0f, 180.0f - h / 2.0f, sx, sy, c);
     }
 }
 

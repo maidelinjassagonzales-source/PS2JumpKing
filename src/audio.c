@@ -83,7 +83,9 @@ void audio_music(const char *intro, const char *loop)
     cur_screen = -1;
     char path[64];
     snprintf(path, sizeof path, "host:assets_ps2/audio/%s.pcm", intro);
-    snprintf(music_loop, sizeof music_loop, "host:assets_ps2/audio/%s.pcm", loop ? loop : intro);
+    /* loop NULL: repite la intro; loop "": suena una sola vez */
+    if (loop && !*loop) music_loop[0] = 0;
+    else snprintf(music_loop, sizeof music_loop, "host:assets_ps2/audio/%s.pcm", loop ? loop : intro);
     if (open_path(&music, path) == 0) music_on = 1;
 }
 
@@ -232,7 +234,7 @@ static void mix_chunk(void)
             got += r; music.pos += r;
             if (music.pos >= music.frames || r == 0) {     /* fin: abrir el loop y seguir */
                 fclose(music.f); music.f = NULL;
-                if (open_path(&music, music_loop) != 0) music_on = 0;
+                if (!music_loop[0] || open_path(&music, music_loop) != 0) music_on = 0;
             }
         }
         if (opt_music)

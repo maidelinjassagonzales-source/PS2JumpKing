@@ -256,10 +256,10 @@ int main(void)
     jk_king k;
     jk_king_init(&k, 240.0f, 200.0f);   /* posicion inicial del original */
     float walk_tick = 0.0f;
-    enum { ST_TITLE, ST_PLAY, ST_PAUSE } state = ST_TITLE;
+    enum { ST_LOGO, ST_TITLE, ST_INTRO, ST_PLAY, ST_PAUSE } state = ST_LOGO;
     int has_save = save_exists();
     if (has_save) game_load(&k);              /* opciones y estadisticas para el titulo */
-    ui_title_enter(has_save);
+    (void)has_save;                           /* el titulo se abre tras el logo */
     float autosave_t = 0.0f;
 
     clock_t fps_t0 = clock();
@@ -272,7 +272,13 @@ int main(void)
             fps_t0 = t1; fps_frames = 0; fps_reports++;
         } else if (fps_frames == 300) fps_frames = 0;
         jk_input in = pad_read();
-        if (state == ST_TITLE) {
+        if (state == ST_LOGO) {
+            if (ui_logo_update(pad_menu)) { state = ST_TITLE; ui_title_enter(has_save); }
+            in.left = in.right = in.jump = 0;
+        } else if (state == ST_INTRO) {
+            if (ui_intro_update()) state = ST_PLAY;
+            in.left = in.right = in.jump = 0;
+        } else if (state == ST_TITLE) {
             int r = ui_title_update(pad_menu);
             if (r == UI_CONTINUE && game_load(&k) == 0) {
                 ui_new_session();
@@ -289,7 +295,8 @@ int main(void)
                 jk_king_init(&k, 240.0f, 200.0f);
                 walk_tick = 0.0f;
                 autosave_t = 0.0f;
-                state = ST_PLAY;
+                ui_intro_enter();
+                state = ST_INTRO;
                 pad_menu_prev |= UI_OK;          /* que el X del menu no cuente como salto */
             }
             in.left = in.right = in.jump = 0;
@@ -340,8 +347,8 @@ int main(void)
         audio_update();
 
         gsKit_clear(gs, border);
-        if (state == ST_TITLE) {
-            /* GameTitleScreen.DrawBG: fondo negro */
+        if (state == ST_TITLE || state == ST_LOGO) {
+            /* GameTitleScreen.DrawBG / NexileLogoScreen: sin escenario */
         } else if (lv->grid) {
             draw_layer(gs, 0);
             draw_layer(gs, 1);
@@ -357,18 +364,20 @@ int main(void)
         }
         items_skins_apply(gs);                    /* aplica cambios de prendas (inventario, recogida, carga) */
         int frame = king_frame(&k, in, &walk_tick);
-        if (state == ST_TITLE) {
+        if (state == ST_TITLE || state == ST_LOGO) {
         } else if (have_sheet) {
             draw_king(gs, &sheet, &k, frame);
         } else {
             jk_rect hb = jk_body_hitbox(&k.body);
             draw_rect(gs, hb.x, hb.y, hb.w, hb.h, k.screen, kingc);
         }
-        if (lv->grid && state != ST_TITLE) {
+        if (lv->grid && state != ST_TITLE && state != ST_LOGO) {
             walls_draw(gs, k.screen, SX, SY);        /* tapan el interior, rey incluido */
             draw_layer(gs, 2);
             npc_draw_bubbles(gs, k.screen, SX, SY);
         }
+        if (state == ST_LOGO) ui_logo_draw(gs, SX, SY);
+        if (state == ST_INTRO) ui_intro_draw(gs, SX, SY);
         if (state == ST_TITLE) ui_title_draw(gs, SX, SY);
         if (state == ST_PAUSE) ui_pause_draw(gs, SX, SY);
         (void)bar;

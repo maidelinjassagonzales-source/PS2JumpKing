@@ -49,6 +49,7 @@ KEYS = [
     'MENUFACTORY_INPUT_BIND_PRIMARY',
     'MENUFACTORY_INPUT_BIND_SECONDARY',
     'PAUSEMANAGER_OPTIONS',
+    'LANGUAGEMANAGER_GAME_INTRO_DESC',
 ]
 
 
@@ -97,7 +98,7 @@ def main():
 
     for name, path in (('title.t8', 'title_logo.xnb'), ('frame.t8', 'gui/frame.xnb'), ('cursor.t8', 'gui/cursor.xnb'),
                        ('back.t8', 'gui/back.xnb'), ('checkbox.t8', 'gui/checkbox.xnb'), ('check.t8', 'gui/check.xnb'),
-                       ('slider.t8', 'gui/slider.xnb'), ('volume.t8', 'gui/volume.xnb'), ('arrows.t8', 'gui/arrows.xnb')):
+                       ('slider.t8', 'gui/slider.xnb'), ('volume.t8', 'gui/volume.xnb'), ('arrows.t8', 'gui/arrows.xnb'), ('nexile.t8', 'JK_Nexile_Logo.xnb')):
         img = texture_rgba(os.path.join(src, path))
         write_t8(img, os.path.join(out, name))
         print(name, img.shape[1], 'x', img.shape[0])
@@ -106,6 +107,8 @@ def main():
     os.makedirs(os.path.join(out, 'audio'), exist_ok=True)
     for n in ('menu_intro', 'menu_loop'):
         write_pcm(os.path.join(out, 'audio', n + '.pcm'), to_pcm(os.path.join(mus, n + '.xnb'), 2))
+    write_pcm(os.path.join(out, 'audio', 'opening.pcm'),                       # IntroState: musica de apertura
+              to_pcm(os.path.join(src, 'audio', 'music', 'opening theme.xnb'), 2))
     write_font(src, out, 'sf_litter_lover2_bold', 'menufont')     # MenuFont
     write_font(src, out, 'sf_small', 'smallfont')                  # MenuFontSmall
     for n, rel in (('title_hit', 'gui_sfx/title_hit'), ('press_start', 'press_start'),

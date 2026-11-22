@@ -16,6 +16,12 @@ int  ui_pause_update(int pressed);                 /* UI_RESUME / UI_EXIT_TO_TIT
 void ui_pause_draw(GSGLOBAL *gs, float sx, float sy);
 /* estadisticas de la sesion (saltos, caidas, tiempo) */
 void ui_stats_event(int jumps, int falls, float dt);
+/* Cinematicas: logo del estudio (NexileLogoScreen) e intro de nueva partida (IntroState) */
+int  ui_logo_update(int pressed);                  /* 1 = terminado */
+void ui_logo_draw(GSGLOBAL *gs, float sx, float sy);
+void ui_intro_enter(void);
+int  ui_intro_update(void);                         /* 1 = terminado: empieza a jugar */
+void ui_intro_draw(GSGLOBAL *gs, float sx, float sy);
 /* opciones y estadisticas para el guardado */
 int  ui_save(unsigned char *out, int max);
 void ui_load(const unsigned char *in, int size);
