@@ -136,6 +136,32 @@ def write_npcs(src, out):
     return len(blobs)
 
 
+def write_signs(src, out):
+    """Carteles y libros (RattmanEntity) de props/messages: zona, punto del texto y lineas."""
+    base = os.path.join(src, 'props', 'messages')
+    signs = []
+    for fn in sorted(os.listdir(base)):
+        if not fn.endswith('.xml'):
+            continue
+        r = ET.parse(os.path.join(base, fn)).getroot()
+        hb = r.find('hitbox')
+        w, h = int(hb.findtext('Width') or 0), int(hb.findtext('Height') or 0)
+        x = int(hb.findtext('X') or 0) - int(w * float(r.findtext('hitbox_center/X') or 0))
+        y = int(hb.findtext('Y') or 0) - int(h * float(r.findtext('hitbox_center/Y') or 0))
+        lines = quote_lines(r.find('text'))
+        if not lines:
+            continue
+        signs.append((int(r.findtext('screen') or 1), x, y, w, h,
+                      int(r.findtext('text_anchor/X') or 0), int(r.findtext('text_anchor/Y') or 0),
+                      int(r.findtext('bubble_format/width') or 160), lines))
+    with open(os.path.join(out, 'signs.bin'), 'wb') as f:
+        f.write(b'JKSG' + struct.pack('<H', len(signs)))
+        for sc, x, y, w, h, ax, ay, bw, lines in signs:
+            f.write(struct.pack('<HhhhhhhHB', sc, x, y, w, h, ax, ay, bw, len(lines)))
+            f.write(b''.join(pack_str(l) for l in lines))
+    return len(signs)
+
+
 def main():
     game, out = sys.argv[1], sys.argv[2]
     load_language(sys.argv[3] if len(sys.argv) > 3 else None)
@@ -144,6 +170,7 @@ def main():
     write_font(src, out)
     print('fuente: font.t8 + font.bin')
     print(f'npc: {write_npcs(src, out)}')
+    print(f'carteles/libros: {write_signs(src, out)}')
 
 
 if __name__ == '__main__':

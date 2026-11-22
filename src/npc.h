@@ -14,6 +14,8 @@ int  npc_take_talk_blip(void);
 int  npc_save(unsigned char *out, int max);
 void npc_load(const unsigned char *in, int size);
 void npc_reset(void);
+/* Carteles y libros (RattmanEntity): quieto 30 frames sobre la zona muestra el texto. */
+void signs_update(const jk_king *k, jk_input in, float dt);
 /* Fuente de dialogo (font.t8): ancho en px del juego y dibujo escalado. */
 float ui_text_width(const char *s, int n);
 void  ui_draw_text(GSGLOBAL *gs, const char *s, int n, float x, float y, float sx, float sy);     /* 1 si toca sonar una letra este frame */

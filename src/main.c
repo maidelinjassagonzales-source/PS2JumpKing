@@ -14,6 +14,7 @@
 #include "npc.h"
 #include "ui.h"
 #include "save.h"
+#include "walls.h"
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -220,6 +221,7 @@ int main(void)
     int have_sheet = assets_t8(gs, "king.t8", &sheet, 0) == 0;
     audio_init();
     npc_init(gs);
+    walls_init(gs);
 
     ui_init(gs);
     save_init();
@@ -293,7 +295,11 @@ int main(void)
         if (k.events & JK_EV_LAND)  audio_play_sfx(SFX_LAND);
         if (k.events & JK_EV_BUMP)  audio_play_sfx(SFX_BUMP);
         if (k.events & JK_EV_SPLAT) audio_play_sfx(SFX_SPLAT);
-        if (state == ST_PLAY) npc_update(gs, &k, JK_DT);
+        if (state == ST_PLAY) {
+            npc_update(gs, &k, JK_DT);
+            signs_update(&k, in, JK_DT);
+            walls_update(gs, &k, JK_DT);
+        }
         if (npc_take_talk_blip()) audio_play_sfx(SFX_TALK);
         audio_update();
 
@@ -320,6 +326,7 @@ int main(void)
             draw_rect(gs, hb.x, hb.y, hb.w, hb.h, k.screen, kingc);
         }
         if (lv->grid && state != ST_TITLE) {
+            walls_draw(gs, k.screen, SX, SY);        /* tapan el interior, rey incluido */
             draw_layer(gs, 2);
             npc_draw_bubbles(gs, k.screen, SX, SY);
         }

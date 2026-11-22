@@ -212,6 +212,67 @@ void npc_update(GSGLOBAL *gs, const jk_king *k, float dt)
 
 int npc_take_talk_blip(void) { int b = blip; blip = 0; return b; }
 
+/* ---- carteles y libros ---- */
+#define MAX_SIGNS 32
+typedef struct {
+    int screen1; jk_rect hit; int ax, ay, bubble_w;
+    quote q;
+    int still, active, line, shown; float char_t, hold_t;
+} sign;
+static sign signs[MAX_SIGNS];
+static int nsigns, signs_loaded;
+
+static void signs_load(void)
+{
+    int n;
+    signs_loaded = 1;
+    unsigned char *b = assets_load("signs.bin", &n);
+    if (!b || memcmp(b, "JKSG", 4) != 0) return;
+    rd = b + 4;
+    int count = rd_u16();
+    for (int i = 0; i < count && nsigns < MAX_SIGNS; i++) {
+        sign *s = &signs[nsigns++];
+        memset(s, 0, sizeof *s);
+        s->screen1 = rd_u16();
+        int off = (s->screen1 - 1) * JK_SCREEN_H;            /* coordenadas de pantalla -> mundo */
+        s->hit.x = rd_s16(); s->hit.y = rd_s16() - off; s->hit.w = rd_s16(); s->hit.h = rd_s16();
+        s->ax = rd_s16(); s->ay = rd_s16() - off; s->bubble_w = rd_u16();
+        s->q.n = rd_u8(); if (s->q.n > MAX_LINES) s->q.n = MAX_LINES;
+        for (int l = 0; l < s->q.n; l++) { s->q.len[l] = rd_u8(); s->q.line[l] = (const char *)rd; rd += s->q.len[l]; }
+    }
+}
+
+void signs_update(const jk_king *k, jk_input in, float dt)
+{
+    if (!signs_loaded) signs_load();
+    jk_rect hb = jk_body_hitbox(&k->body);
+    for (int i = 0; i < nsigns; i++) {
+        sign *s = &signs[i];
+        if (s->screen1 - 1 != k->screen || !jk_rect_overlap(&s->hit, &hb)) {
+            s->still = 0; s->active = 0;                     /* al salir se reinicia */
+            continue;
+        }
+        if (!s->active) {
+            int quiet = !(in.left ^ in.right) && !in.jump;   /* PlayerStandStill */
+            s->still = quiet ? s->still + 1 : 0;
+            if (s->still >= 30) { s->active = 1; s->line = 0; s->shown = 0; s->char_t = 0; s->hold_t = 0; }
+            continue;
+        }
+        if (s->line >= s->q.n) continue;
+        if (s->shown < s->q.len[s->line]) {
+            s->char_t += dt;
+            if (s->char_t >= 0.05f) {
+                s->char_t -= 0.05f;
+                if (s->q.line[s->line][s->shown] != ' ') blip = 1;
+                s->shown++;
+            }
+        } else if ((s->hold_t += dt) >= 2.2f) {
+            s->hold_t = 0; s->shown = 0; s->char_t = 0;
+            if (++s->line >= s->q.n) s->line = s->q.n;    /* se queda en silencio hasta salir */
+        }
+    }
+}
+
 int npc_save(unsigned char *out, int max)
 {
     int p = 0;
@@ -323,9 +384,34 @@ void npc_draw(GSGLOBAL *gs, int screen, float sx, float sy)
     }
 }
 
+static void draw_lines_at(GSGLOBAL *gs, const char *s, int n, int bubble_w, float bx, float by_bottom, float sx, float sy)
+{
+    int starts[12], lens[12], rows = 0, i = 0;
+    while (i < n && rows < 12) {
+        int st = i, last_sp = -1;
+        while (i < n && ui_text_width(s + st, i - st + 1) <= bubble_w) { if (s[i] == ' ') last_sp = i; i++; }
+        if (i < n && last_sp > st) i = last_sp + 1;
+        starts[rows] = st; lens[rows] = i - st; rows++;
+    }
+    if (!rows) return;
+    float h = rows * (float)font_line + 8.0f, w = (float)bubble_w + 8.0f, by = by_bottom - h;
+    if (bx + w > JK_SCREEN_W - 4) bx = JK_SCREEN_W - 4 - w;
+    if (bx < 4) bx = 4;
+    if (by < 4) by = 4;
+    gsKit_prim_sprite(gs, bx * sx, by * sy, (bx + w) * sx, (by + h) * sy, 5, GS_SETREG_RGBAQ(0, 0, 0, 0x60, 0));
+    for (int r = 0; r < rows; r++)
+        ui_draw_text(gs, s + starts[r], lens[r], bx + 4, by + 4 + r * font_line, sx, sy);
+}
+
 /* Bocadillos aparte: van encima de la capa de frente para que no los tape el decorado. */
 void npc_draw_bubbles(GSGLOBAL *gs, int screen, float sx, float sy)
 {
+    for (int i = 0; i < nsigns; i++) {
+        const sign *s = &signs[i];
+        if (s->screen1 - 1 != screen || !s->active || s->line >= s->q.n) continue;
+        draw_lines_at(gs, s->q.line[s->line], s->shown, s->bubble_w, (float)s->ax,
+                      (float)(s->ay + screen * JK_SCREEN_H), sx, sy);
+    }
     for (int i = 0; i < npc_count; i++)
         if (npcs[i].home - 1 == screen && npcs[i].talking) draw_bubble(gs, &npcs[i], screen, sx, sy);
 }
