@@ -16,4 +16,9 @@ int  ui_pause_update(int pressed);                 /* UI_RESUME / UI_EXIT_TO_TIT
 void ui_pause_draw(GSGLOBAL *gs, float sx, float sy);
 /* estadisticas de la sesion (saltos, caidas, tiempo) */
 void ui_stats_event(int jumps, int falls, float dt);
+/* opciones y estadisticas para el guardado */
+int  ui_save(unsigned char *out, int max);
+void ui_load(const unsigned char *in, int size);
+void ui_new_attempt(void);      /* nueva partida: intento +1, estadisticas a cero */
+void ui_new_session(void);      /* continuar: sesion +1 */
 #endif

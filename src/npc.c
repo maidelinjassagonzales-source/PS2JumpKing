@@ -212,6 +212,50 @@ void npc_update(GSGLOBAL *gs, const jk_king *k, float dt)
 
 int npc_take_talk_blip(void) { int b = blip; blip = 0; return b; }
 
+int npc_save(unsigned char *out, int max)
+{
+    int p = 0;
+    if (max < 2) return 0;
+    out[p++] = (unsigned char)npc_count;
+    for (int i = 0; i < npc_count && p + 70 < max; i++) {
+        const npc *n = &npcs[i];
+        out[p++] = (unsigned char)n->say_intro;
+        out[p++] = (unsigned char)n->best;
+        out[p++] = (unsigned char)n->pool_n;
+        for (int k = 0; k < 64; k++) out[p++] = (unsigned char)n->pool[k];
+        out[p++] = (unsigned char)n->loop_i;
+    }
+    return p;
+}
+
+void npc_load(const unsigned char *in, int size)
+{
+    int p = 0;
+    if (size < 1) return;
+    int count = in[p++];
+    for (int i = 0; i < count && i < npc_count && p + 68 <= size; i++) {
+        npc *n = &npcs[i];
+        n->say_intro = in[p++];
+        n->best = in[p++];
+        n->pool_n = in[p++]; if (n->pool_n > 64) n->pool_n = 64;
+        for (int k = 0; k < 64; k++) n->pool[k] = in[p++];
+        n->loop_i = in[p++];
+        n->talking = 0; n->touch_t = 0;
+    }
+    quote_screen = -1;
+}
+
+void npc_reset(void)
+{
+    for (int i = 0; i < npc_count; i++) {
+        npc *n = &npcs[i];
+        n->say_intro = 0;
+        for (int q = 0; q < n->nq; q++) if (n->q[q].kind == 0) n->say_intro = 1;
+        n->best = 0; n->pool_n = 0; n->loop_i = 0; n->talking = 0; n->touch_t = 0;
+    }
+    quote_screen = -1;
+}
+
 float ui_text_width(const char *s, int n)
 {
     float w = 0;

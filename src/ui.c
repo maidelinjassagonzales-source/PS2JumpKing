@@ -38,9 +38,43 @@ static float opt_volume = 1.0f;
 static int st_attempt = 1, st_session = 1, st_jumps, st_falls;
 static float st_time;
 
+static void update_stats_text(void);
+
 void ui_stats_event(int jumps, int falls, float dt) { st_jumps += jumps; st_falls += falls; st_time += dt; }
 
 static void apply_audio(void) { audio_set_options(opt_volume, opt_music, opt_sfx, opt_amb); }
+
+typedef struct {
+    int music, sfx, amb, quickload, show_timer, timer_mode, screen_mode, size;
+    float volume;
+    int attempt, session, jumps, falls;
+    float time;
+} ui_state;
+
+int ui_save(unsigned char *out, int max)
+{
+    ui_state s = { opt_music, opt_sfx, opt_amb, opt_quickload, opt_show_timer, opt_timer_mode, opt_screen_mode,
+                   opt_size, opt_volume, st_attempt, st_session, st_jumps, st_falls, st_time };
+    if (max < (int)sizeof s) return 0;
+    memcpy(out, &s, sizeof s);
+    return sizeof s;
+}
+
+void ui_load(const unsigned char *in, int size)
+{
+    ui_state s;
+    if (size < (int)sizeof s) return;
+    memcpy(&s, in, sizeof s);
+    opt_music = s.music; opt_sfx = s.sfx; opt_amb = s.amb; opt_quickload = s.quickload;
+    opt_show_timer = s.show_timer; opt_timer_mode = s.timer_mode; opt_screen_mode = s.screen_mode;
+    opt_size = s.size; opt_volume = s.volume;
+    st_attempt = s.attempt; st_session = s.session; st_jumps = s.jumps; st_falls = s.falls; st_time = s.time;
+    apply_audio();
+    update_stats_text();
+}
+
+void ui_new_attempt(void) { st_attempt++; st_session = 1; st_jumps = st_falls = 0; st_time = 0; update_stats_text(); }
+void ui_new_session(void) { st_session++; update_stats_text(); }
 
 /* ---- elementos ---- */
 
@@ -552,7 +586,6 @@ int ui_title_update(int pressed)
         int a = menu_input(pressed);
         if (a == A_NEW_GAME || a == A_CONTINUE) {
             audio_music(NULL, NULL);
-            if (a == A_NEW_GAME) { st_jumps = st_falls = 0; st_time = 0; }
             return a == A_CONTINUE ? UI_CONTINUE : UI_NEW_GAME;
         }
         break;
@@ -582,6 +615,14 @@ void ui_title_draw(GSGLOBAL *gs, float sx, float sy)
         font_draw(gs, &menufont, text[T_COPYRIGHT], 337.0f, 30.0f + 0.5f * menufont.line, sx, sy, GRAY);
         float sw = font_width(&menufont, text[T_SAVED]);
         font_draw(gs, &menufont, text[T_SAVED], 462.0f - sw, 352.0f - menufont.line, sx, sy, GRAY);
+        if (has_save) {                       /* CreateStatsDisplay: a la derecha, a y=160 */
+            static menu box;
+            box.f = BASE; box.f.by = 160; box.n = 0; box.sel = -1;
+            update_stats_text();
+            add(&box, info(text[T_NEW_GAME], GRAY, 0));
+            for (int i = 0; i < 4; i++) add(&box, info(stat_lines[i], GRAY, 0));
+            draw_menu(gs, &box, sx, sy);
+        }
         draw_stack(gs, sx, sy);
     }
 }

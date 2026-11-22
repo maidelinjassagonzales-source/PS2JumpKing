@@ -13,6 +13,7 @@
 #include "audio.h"
 #include "npc.h"
 #include "ui.h"
+#include "save.h"
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -77,6 +78,39 @@ static jk_input pad_read(void)
 /* El juego es 480x360; se escala a toda la pantalla de 640x448. */
 #define SX (640.0f / JK_SCREEN_W)
 #define SY (448.0f / JK_SCREEN_H)
+
+/* ---- guardado: rey + opciones/estadisticas + NPC ---- */
+typedef struct { float x, y, vx, vy, run_time; int screen, facing, on_ground; } king_state;
+
+static void game_save(const jk_king *k)
+{
+    static unsigned char blob[SAVE_BLOB_MAX];
+    king_state ks = { k->body.x, k->body.y, k->body.vx, k->body.vy, k->body.run_time, k->screen, k->facing, k->body.on_ground };
+    int p = 0;
+    memcpy(blob, &ks, sizeof ks); p += sizeof ks;
+    int u = ui_save(blob + p + 2, SAVE_BLOB_MAX - p - 2);
+    blob[p] = u & 255; blob[p + 1] = u >> 8; p += 2 + u;
+    int n = npc_save(blob + p + 2, SAVE_BLOB_MAX - p - 2);
+    blob[p] = n & 255; blob[p + 1] = n >> 8; p += 2 + n;
+    save_write(blob, p);
+}
+
+static int game_load(jk_king *k)
+{
+    static unsigned char blob[SAVE_BLOB_MAX];
+    int size = save_read(blob, sizeof blob);
+    if (size < (int)sizeof(king_state) + 4) return -1;
+    king_state ks; memcpy(&ks, blob, sizeof ks);
+    jk_king_init(k, ks.x, ks.y);
+    k->body.vx = ks.vx; k->body.vy = ks.vy; k->body.run_time = ks.run_time;
+    k->screen = ks.screen; k->facing = ks.facing; k->body.on_ground = ks.on_ground;
+    int p = sizeof ks;
+    int u = blob[p] | blob[p + 1] << 8; p += 2;
+    ui_load(blob + p, u); p += u;
+    int n = blob[p] | blob[p + 1] << 8; p += 2;
+    if (p + n <= size) npc_load(blob + p, n);
+    return 0;
+}
 
 static void draw_rect(GSGLOBAL *gs, int x, int y, int w, int h, int screen, u64 c)
 {
@@ -188,12 +222,16 @@ int main(void)
     npc_init(gs);
 
     ui_init(gs);
+    save_init();
 
     jk_king k;
     jk_king_init(&k, 240.0f, 200.0f);   /* posicion inicial del original */
     float walk_tick = 0.0f;
     enum { ST_TITLE, ST_PLAY, ST_PAUSE } state = ST_TITLE;
-    ui_title_enter(0);
+    int has_save = save_exists();
+    if (has_save) game_load(&k);              /* opciones y estadisticas para el titulo */
+    ui_title_enter(has_save);
+    float autosave_t = 0.0f;
 
     clock_t fps_t0 = clock();
     int fps_frames = 0, fps_reports = 0;
@@ -207,9 +245,19 @@ int main(void)
         jk_input in = pad_read();
         if (state == ST_TITLE) {
             int r = ui_title_update(pad_menu);
-            if (r == UI_NEW_GAME || r == UI_CONTINUE) {
+            if (r == UI_CONTINUE && game_load(&k) == 0) {
+                ui_new_session();
+                walk_tick = 0.0f;
+                state = ST_PLAY;
+                autosave_t = 0.0f;
+                pad_menu_prev |= UI_OK;
+            } else if (r == UI_NEW_GAME || r == UI_CONTINUE) {
+                save_delete();
+                npc_reset();
+                ui_new_attempt();
                 jk_king_init(&k, 240.0f, 200.0f);
                 walk_tick = 0.0f;
+                autosave_t = 0.0f;
                 state = ST_PLAY;
                 pad_menu_prev |= UI_OK;          /* que el X del menu no cuente como salto */
             }
@@ -217,7 +265,11 @@ int main(void)
         } else if (state == ST_PAUSE) {
             int r = ui_pause_update(pad_menu);
             if (r == UI_RESUME) state = ST_PLAY;
-            if (r == UI_EXIT_TO_TITLE) { state = ST_TITLE; ui_title_enter(0); }
+            if (r == UI_EXIT_TO_TITLE) {
+                game_save(&k);                     /* Guardar y salir */
+                state = ST_TITLE;
+                ui_title_enter(1);
+            }
         } else if (pad_menu & UI_START) {
             state = ST_PAUSE;
             ui_pause_enter();
@@ -226,6 +278,12 @@ int main(void)
             jk_king_update(&k, lv, in);
             audio_set_screen(k.screen);
             ui_stats_event((k.events & JK_EV_JUMP) != 0, (k.events & JK_EV_SPLAT) != 0, JK_DT);
+            /* autoguardado cada 30 s, con el rey quieto en el suelo */
+            autosave_t += JK_DT;
+            if (autosave_t >= 30.0f && k.body.on_ground && k.charge == 0.0f && !k.splatted) {
+                game_save(&k);
+                autosave_t = 0.0f;
+            }
         } else {
             in.left = in.right = in.jump = 0;
         }
