@@ -257,6 +257,11 @@ void npc_draw(GSGLOBAL *gs, int screen, float sx, float sy)
         float x0 = (ax - cw / 2.0f) * sx, y0 = (ay - ch) * sy;
         gsKit_prim_sprite_texture(gs, t, x0, y0, u0, v0, x0 + cw * sx, y0 + ch * sy, u0 + cw, v0 + ch, 2, 0x80808080);
     }
+}
+
+/* Bocadillos aparte: van encima de la capa de frente para que no los tape el decorado. */
+void npc_draw_bubbles(GSGLOBAL *gs, int screen, float sx, float sy)
+{
     for (int i = 0; i < npc_count; i++)
         if (npcs[i].home - 1 == screen && npcs[i].talking) draw_bubble(gs, &npcs[i], screen, sx, sy);
 }

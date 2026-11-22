@@ -8,5 +8,6 @@
 int  npc_init(GSGLOBAL *gs);
 void npc_update(GSGLOBAL *gs, const jk_king *k, float dt);
 void npc_draw(GSGLOBAL *gs, int screen, float sx, float sy);
+void npc_draw_bubbles(GSGLOBAL *gs, int screen, float sx, float sy);
 int  npc_take_talk_blip(void);     /* 1 si toca sonar una letra este frame */
 #endif

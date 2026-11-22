@@ -219,7 +219,10 @@ int main(void)
             jk_rect hb = jk_body_hitbox(&k.body);
             draw_rect(gs, hb.x, hb.y, hb.w, hb.h, k.screen, kingc);
         }
-        if (lv->grid) draw_layer(gs, 2);
+        if (lv->grid) {
+            draw_layer(gs, 2);
+            npc_draw_bubbles(gs, k.screen, SX, SY);
+        }
         if (k.charge > 0.0f)
             gsKit_prim_sprite(gs, 0, 440, 640.0f * (k.charge / JK.charge_time), 446, 4, bar);
 
