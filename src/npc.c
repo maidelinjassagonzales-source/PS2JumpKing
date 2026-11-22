@@ -212,7 +212,7 @@ void npc_update(GSGLOBAL *gs, const jk_king *k, float dt)
 
 int npc_take_talk_blip(void) { int b = blip; blip = 0; return b; }
 
-static float text_width(const char *s, int n)
+float ui_text_width(const char *s, int n)
 {
     float w = 0;
     for (int i = 0; i < n; i++) {
@@ -222,7 +222,7 @@ static float text_width(const char *s, int n)
     return w;
 }
 
-static void draw_text(GSGLOBAL *gs, const char *s, int n, float x, float y, float sx, float sy)
+void ui_draw_text(GSGLOBAL *gs, const char *s, int n, float x, float y, float sx, float sy)
 {
     float cx = x;
     for (int i = 0; i < n; i++) {
@@ -247,7 +247,7 @@ static void draw_bubble(GSGLOBAL *gs, const npc *p, int screen, float sx, float 
     int starts[12], lens[12], rows = 0, i = 0;
     while (i < n && rows < 12) {
         int st = i, last_sp = -1;
-        while (i < n && text_width(s + st, i - st + 1) <= p->bubble_w) { if (s[i] == ' ') last_sp = i; i++; }
+        while (i < n && ui_text_width(s + st, i - st + 1) <= p->bubble_w) { if (s[i] == ' ') last_sp = i; i++; }
         if (i < n && last_sp > st) i = last_sp + 1;
         starts[rows] = st; lens[rows] = i - st; rows++;
     }
@@ -259,7 +259,7 @@ static void draw_bubble(GSGLOBAL *gs, const npc *p, int screen, float sx, float 
     if (by < 4) by = 4;
     gsKit_prim_sprite(gs, bx * sx, by * sy, (bx + w) * sx, (by + h) * sy, 5, GS_SETREG_RGBAQ(0, 0, 0, 0x60, 0));
     for (int r = 0; r < rows; r++)
-        draw_text(gs, s + starts[r], lens[r], bx + 4, by + 4 + r * font_line, sx, sy);
+        ui_draw_text(gs, s + starts[r], lens[r], bx + 4, by + 4 + r * font_line, sx, sy);
 }
 
 void npc_draw(GSGLOBAL *gs, int screen, float sx, float sy)

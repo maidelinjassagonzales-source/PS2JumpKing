@@ -5,5 +5,7 @@ enum { SFX_JUMP, SFX_LAND, SFX_BUMP, SFX_SPLAT, SFX_TALK, SFX_COUNT };
 int  audio_init(void);              /* 0 = ok (sin datos convertidos queda en silencio) */
 void audio_set_screen(int screen);  /* como AmbienceManager: para las pistas viejas, arranca las nuevas */
 void audio_play_sfx(int id);
-void audio_update(void);            /* llamar una vez por frame */
+void audio_update(void);
+/* Musica suelta (menu): suena intro y luego loop en bucle; NULL para parar. Calla el ambiente. */
+void audio_music(const char *intro, const char *loop);            /* llamar una vez por frame */
 #endif

@@ -41,10 +41,8 @@ static voice voices[8];
 static short mixbuf[CHUNK * 2];
 static short readbuf[CHUNK * 2];
 
-static int open_track(stream *s, int id)
+static int open_path(stream *s, const char *name)
 {
-    char name[40];
-    snprintf(name, sizeof name, "host:assets_ps2/audio/amb/%03d.pcm", id);
     s->f = fopen(name, "rb");
     if (!s->f) return -1;
     unsigned char h[16];
@@ -52,6 +50,34 @@ static int open_track(stream *s, int id)
     s->frames = h[12] | h[13] << 8 | h[14] << 16 | (unsigned)h[15] << 24;
     s->pos = 0;
     return 0;
+}
+
+static int open_track(stream *s, int id)
+{
+    char name[40];
+    snprintf(name, sizeof name, "host:assets_ps2/audio/amb/%03d.pcm", id);
+    return open_path(s, name);
+}
+
+/* Musica de menu: un stream aparte; al acabar la intro pasa al loop. */
+static stream music;
+static char music_loop[64];
+static int music_on;
+
+void audio_music(const char *intro, const char *loop)
+{
+    if (music_on && music.f) fclose(music.f);
+    music_on = 0;
+    music.f = NULL;
+    if (!intro) return;
+    /* el ambiente se calla mientras suena el menu */
+    for (int i = 0; i < MAX_PLAY; i++)
+        if (play[i].id >= 0) { fclose(play[i].f); play[i].f = NULL; play[i].id = -1; }
+    cur_screen = -1;
+    char path[64];
+    snprintf(path, sizeof path, "host:assets_ps2/audio/%s.pcm", intro);
+    snprintf(music_loop, sizeof music_loop, "host:assets_ps2/audio/%s.pcm", loop ? loop : intro);
+    if (open_path(&music, path) == 0) music_on = 1;
 }
 
 static void load_sfx(int i, const char *name)
@@ -179,6 +205,20 @@ static void mix_chunk(void)
             if (r == 0 && want > 0) break;
         }
         for (unsigned j = 0; j < got * 2; j++) acc[j] += (readbuf[j] * vol) >> 8;
+    }
+    if (music_on) {
+        unsigned got = 0;
+        while (got < CHUNK && music_on) {
+            unsigned want = CHUNK - got;
+            if (music.pos + want > music.frames) want = music.frames - music.pos;
+            size_t r = fread(readbuf + got * 2, 4, want, music.f);
+            got += r; music.pos += r;
+            if (music.pos >= music.frames || r == 0) {     /* fin: abrir el loop y seguir */
+                fclose(music.f); music.f = NULL;
+                if (open_path(&music, music_loop) != 0) music_on = 0;
+            }
+        }
+        for (unsigned j = 0; j < got * 2; j++) acc[j] += readbuf[j];
     }
     for (int v = 0; v < 8; v++) {
         voice *vc = &voices[v];

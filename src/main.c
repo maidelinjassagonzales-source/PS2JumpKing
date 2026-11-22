@@ -1,5 +1,5 @@
-/* Jump King PS2 - bucle principal: entrada del mando, logica a 60 Hz, dibujo con gsKit.
- * Graficos provisionales: rectangulos de color (sin assets del juego). */
+/* Jump King PS2 - bucle principal: titulo, juego y pausa a 60 Hz con gsKit.
+ * Los datos del juego se cargan de assets_ps2/ (generados desde la copia del usuario). */
 #include <kernel.h>
 #include <sifrpc.h>
 #include <loadfile.h>
@@ -12,6 +12,7 @@
 #include "assets.h"
 #include "audio.h"
 #include "npc.h"
+#include "ui.h"
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -32,10 +33,14 @@ static void pad_init(void)
         padPortOpen(p, 0, pad_buf[p]);
 }
 
-/* Lee los dos puertos: cruceta o stick izquierdo para andar, X para saltar. */
+/* Botones de menu de este frame (UI_*), ya en flanco de pulsacion. */
+static int pad_menu, pad_menu_prev;
+
+/* Lee los dos puertos: cruceta o stick izquierdo para andar, X para saltar, Start para pausa. */
 static jk_input pad_read(void)
 {
     jk_input in = {0, 0, 0};
+    int menu = 0;
     for (int p = 0; p < 2; p++) {
         struct padButtonStatus st;
         int s = padGetState(p, 0);
@@ -48,13 +53,22 @@ static jk_input pad_read(void)
         }
         if (padRead(p, 0, &st) == 0) continue;
         u32 b = 0xFFFF ^ st.btns;
-        int lx = 0;
-        if ((st.mode >> 4) == 0x7)          /* DualShock en analogico */
+        int lx = 0, ly = 0;
+        if ((st.mode >> 4) == 0x7) {        /* DualShock en analogico */
             lx = (int)st.ljoy_h - 128;
+            ly = (int)st.ljoy_v - 128;
+        }
+        if ((b & PAD_UP) || ly < -77)   menu |= UI_UP;
+        if ((b & PAD_DOWN) || ly > 77)  menu |= UI_DOWN;
+        if (b & PAD_CROSS)              menu |= UI_OK;
+        if (b & (PAD_CIRCLE | PAD_TRIANGLE)) menu |= UI_BACK;
+        if (b & PAD_START)              menu |= UI_START;
         in.left  |= (b & PAD_LEFT) != 0  || lx < -77;
         in.right |= (b & PAD_RIGHT) != 0 || lx >  77;
         in.jump  |= (b & PAD_CROSS) != 0;
     }
+    pad_menu = menu & ~pad_menu_prev;
+    pad_menu_prev = menu;
     return in;
 }
 
@@ -171,9 +185,13 @@ int main(void)
     audio_init();
     npc_init(gs);
 
+    ui_init(gs);
+
     jk_king k;
     jk_king_init(&k, 240.0f, 200.0f);   /* posicion inicial del original */
     float walk_tick = 0.0f;
+    enum { ST_TITLE, ST_PLAY, ST_PAUSE } state = ST_TITLE;
+    ui_title_enter(0);
 
     clock_t fps_t0 = clock();
     int fps_frames = 0, fps_reports = 0;
@@ -185,15 +203,36 @@ int main(void)
             fps_t0 = t1; fps_frames = 0; fps_reports++;
         } else if (fps_frames == 300) fps_frames = 0;
         jk_input in = pad_read();
-        jk_king_update(&k, lv, in);
+        if (state == ST_TITLE) {
+            int r = ui_title_update(pad_menu);
+            if (r == UI_NEW_GAME || r == UI_CONTINUE) {
+                jk_king_init(&k, 240.0f, 200.0f);
+                walk_tick = 0.0f;
+                state = ST_PLAY;
+                pad_menu_prev |= UI_OK;          /* que el X del menu no cuente como salto */
+            }
+            in.left = in.right = in.jump = 0;
+        } else if (state == ST_PAUSE) {
+            int r = ui_pause_update(pad_menu);
+            if (r == UI_RESUME) state = ST_PLAY;
+            if (r == UI_EXIT_TO_TITLE) { state = ST_TITLE; ui_title_enter(0); }
+        } else if (pad_menu & UI_START) {
+            state = ST_PAUSE;
+            ui_pause_enter();
+        }
+        if (state == ST_PLAY) {
+            jk_king_update(&k, lv, in);
+            audio_set_screen(k.screen);
+        } else {
+            in.left = in.right = in.jump = 0;
+        }
         if (lv->grid && k.screen != loaded_screen)
             load_screen_layers(gs, k.screen);
-        audio_set_screen(k.screen);
         if (k.events & JK_EV_JUMP)  audio_play_sfx(SFX_JUMP);
         if (k.events & JK_EV_LAND)  audio_play_sfx(SFX_LAND);
         if (k.events & JK_EV_BUMP)  audio_play_sfx(SFX_BUMP);
         if (k.events & JK_EV_SPLAT) audio_play_sfx(SFX_SPLAT);
-        npc_update(gs, &k, JK_DT);
+        if (state == ST_PLAY) npc_update(gs, &k, JK_DT);
         if (npc_take_talk_blip()) audio_play_sfx(SFX_TALK);
         audio_update();
 
@@ -210,7 +249,9 @@ int main(void)
                 }
         }
         int frame = king_frame(&k, in, &walk_tick);
-        if (have_sheet) {
+        if (state == ST_TITLE) {
+            /* en el titulo no hay rey: solo el escenario de la primera pantalla */
+        } else if (have_sheet) {
             draw_king(gs, &sheet, &k, frame);
         } else {
             jk_rect hb = jk_body_hitbox(&k.body);
@@ -220,8 +261,9 @@ int main(void)
             draw_layer(gs, 2);
             npc_draw_bubbles(gs, k.screen, SX, SY);
         }
-        if (k.charge > 0.0f)
-            gsKit_prim_sprite(gs, 0, 440, 640.0f * (k.charge / JK.charge_time), 446, 4, bar);
+        if (state == ST_TITLE) ui_title_draw(gs, SX, SY);
+        if (state == ST_PAUSE) ui_pause_draw(gs, SX, SY);
+        (void)bar;
 
         gsKit_queue_exec(gs);
         gsKit_sync_flip(gs);
