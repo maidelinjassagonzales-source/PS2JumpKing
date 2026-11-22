@@ -10,3 +10,7 @@ tests/host_sim
 assets_ps2/
 __pycache__/
 src/audsrv_irx.c
+src/icon_sys.c
+src/icon_ico.c
+src/icon_sys.c
+src/icon_ico.c

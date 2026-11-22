@@ -13,6 +13,27 @@
 static int ready, unformatted;
 static char buf[SAVE_BLOB_MAX + 16] __attribute__((aligned(64)));
 
+/* Memory card icon (the port's original character, tools/make_icon.py), embedded in the ELF */
+extern unsigned char icon_sys[];
+extern unsigned int size_icon_sys;
+extern unsigned char icon_ico[];
+extern unsigned int size_icon_ico;
+
+static void write_raw(const char *path, const unsigned char *data, unsigned size)
+{
+    static char tmp[40 * 1024] __attribute__((aligned(64)));
+    int fd, r;
+    if (size > sizeof tmp) return;
+    memcpy(tmp, data, size);
+    mcOpen(0, 0, path, O_WRONLY | O_CREAT | O_TRUNC);
+    mcSync(0, NULL, &fd);
+    if (fd < 0) return;
+    mcWrite(fd, tmp, size);
+    mcSync(0, NULL, &r);
+    mcClose(fd);
+    mcSync(0, NULL, &r);
+}
+
 int save_init(void)
 {
     int r;
@@ -81,7 +102,9 @@ int save_write(const void *data, int size)
     if (ensure_formatted() != 0) return -1;
     int r;
     mcMkDir(0, 0, DIR);
-    mcSync(0, NULL, &r);                      /* -4 si ya existe: no es error */
+    mcSync(0, NULL, &r);                      /* -4 if it already exists: not an error */
+    write_raw(DIR "/icon.sys", icon_sys, size_icon_sys);    /* what the PS2 browser shows */
+    write_raw(DIR "/jkps2.ico", icon_ico, size_icon_ico);
     int fd = open_file(O_WRONLY | O_CREAT | O_TRUNC);
     if (fd < 0) { printf("[jk] no se pudo abrir el guardado (%d)\n", fd); return -1; }
     memcpy(buf, "JKSV", 4);

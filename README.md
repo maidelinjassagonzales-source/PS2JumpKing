@@ -1,5 +1,7 @@
 # PS2JumpKing
 
+Port para PlayStation 2 hecho por **Aroy 24**.
+
 Port homebrew de Jump King a PlayStation 2 (PS2SDK + gsKit), basado en la ingeniería inversa
 del ejecutable original (no en lógica inventada). Ver `docs/procedencia.md`.
 

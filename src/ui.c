@@ -390,7 +390,10 @@ static void build_menus(void)
     m = &menus[M_INV]; m->f = BASE; m->f.elem = 1; finish(m);   /* sin objetos todavia */
 
     m = &menus[M_CREDITS]; m->f = BASE; m->f.margin = 8; m->f.elem = 0;
-    build_credits(m); finish(m);
+    build_credits(m);
+    add(m, info("Aroy 24", GRAY, 0));                       /* port credits */
+    add(m, info("  Port para PlayStation 2", GRAY, 1));
+    finish(m);
 
     m = &menus[M_LICENSE]; m->f = fmt_title(120);
     add(m, info(text[T_FONT_ATTR], GRAY, 0));
@@ -741,6 +744,12 @@ void ui_credits_enter(void)
             p += l;
         }
         roll_lines[roll_n++] = 1 + k;
+    }
+    /* port credits */
+    if (roll_n < MAX_ROLL) {
+        strcpy(roll_text[roll_n][0], "PORT PARA PLAYSTATION 2");
+        strcpy(roll_text[roll_n][1], "Aroy 24");
+        roll_lines[roll_n++] = 2;
     }
 }
 
