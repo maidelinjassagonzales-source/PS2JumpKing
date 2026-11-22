@@ -12,9 +12,13 @@ typedef struct {
 } jk_screen;
 
 typedef struct {
-    const jk_screen *screens;
+    const jk_screen *screens;   /* nivel de prueba (cajas) */
     int count;
+    const unsigned char *grid;  /* nivel real: count * 45 * 60 celdas de 8 px (tipo de bloque), o NULL */
 } jk_level;
+
+enum { JK_TILE_W = 60, JK_TILE_H = 45 };
+enum { JK_B_NONE, JK_B_SOLID, JK_B_SLOPE, JK_B_ICE, JK_B_SNOW, JK_B_SAND, JK_B_NOWIND, JK_B_WATER, JK_B_QUARK };
 
 int jk_rect_overlap(const jk_rect *a, const jk_rect *b);
 
@@ -22,5 +26,8 @@ int jk_rect_overlap(const jk_rect *a, const jk_rect *b);
 int jk_level_collides(const jk_level *lv, int screen, const jk_rect *box);
 
 extern const jk_level jk_test_level;
+
+/* Usa una rejilla cargada de level.bin (tools/build_assets.py). */
+int jk_level_from_grid(jk_level *lv, const unsigned char *grid, int count);
 
 #endif

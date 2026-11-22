@@ -7,3 +7,4 @@ build/
 *.iso
 *.o
 tests/host_sim
+assets_ps2/
