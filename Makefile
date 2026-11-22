@@ -7,6 +7,10 @@ EE_LDFLAGS += -L$(GSKIT)/lib
 EE_LIBS    += -lgskit -ldmakit -ldma -lpad -laudsrv -lmc -lpatches -lm
 EE_CFLAGS  += -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
 
+# Assets: ILSpy de linea de comandos y el idioma de tu instalacion (es-ES, en-US, ...)
+ILSPY ?= ilspycmd
+JKLANG ?= es-ES
+
 all: $(EE_BIN)
 
 # Memory card icon (original character, tools/make_icon.py) embedded in the ELF.
@@ -35,12 +39,13 @@ test:
 assets:
 	python3 -I tools/build_assets.py "$(GAME)" assets_ps2
 	python3 -I tools/build_audio.py "$(GAME)" assets_ps2
-	tools/_bin/ilspy/ilspycmd.exe -p -o _ref/lang_es "$(GAME)/es-ES/LanguageJK.resources.dll"
-	python3 -I tools/build_npcs.py "$(GAME)" assets_ps2 _ref/lang_es/LanguageJK.language.es-ES.resx
+	$(ILSPY) -p -o _ref/decomp "$(GAME)/JumpKing.exe"
+	$(ILSPY) -p -o _ref/lang "$(GAME)/$(JKLANG)/LanguageJK.resources.dll"
+	python3 -I tools/build_npcs.py "$(GAME)" assets_ps2 _ref/lang/LanguageJK.language.$(JKLANG).resx
 	python3 -I tools/build_weather.py "$(GAME)" assets_ps2
 	python3 -I tools/build_scroll.py "$(GAME)" assets_ps2
 	python3 -I tools/build_ending.py "$(GAME)" assets_ps2
-	python3 -I tools/build_items.py "$(GAME)" assets_ps2 _ref/lang_es/LanguageJK.language.es-ES.resx
+	python3 -I tools/build_items.py "$(GAME)" assets_ps2 _ref/lang/LanguageJK.language.$(JKLANG).resx
 	python3 -I tools/build_props.py "$(GAME)" assets_ps2
 	python3 -I tools/build_walls.py "$(GAME)" assets_ps2
-	python3 -I tools/build_ui.py "$(GAME)" assets_ps2 _ref/lang_es/LanguageJK.language.es-ES.resx
+	python3 -I tools/build_ui.py "$(GAME)" assets_ps2 _ref/lang/LanguageJK.language.$(JKLANG).resx
