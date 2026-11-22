@@ -17,6 +17,11 @@ KEYS = [
     'MENUFACTORY_SAVEGAME_AREYOUSURE',
     'MENUFACTORY_YES',
     'MENUFACTORY_NO',
+    'GAMETITLESCREEN_COPYRIGHT_NEXILE',
+    'GAMETITLESCREEN_ALL_PROGESS_SAVED',
+    'PAUSEMANAGER_WORKSHOP',
+    'GAMETITLESCREEN_EXTRAS',
+    'GAMETITLESCREEN_OPTIONS',
 ]
 
 
@@ -40,7 +45,7 @@ def main():
         write_pcm(os.path.join(out, 'audio', n + '.pcm'), to_pcm(os.path.join(mus, n + '.xnb'), 2))
     write_font(src, out, 'sf_litter_lover2_bold', 'menufont')     # FontManager.MenuFont
     for n, rel in (('title_hit', 'gui_sfx/title_hit'), ('press_start', 'press_start'),
-                   ('select', 'gui_sfx/selectC'), ('menu_open', 'gui_sfx/menu_open')):
+                   ('select', 'gui_sfx/selectC'), ('menu_open', 'gui_sfx/menu_open'), ('menu_fail', 'gui_sfx/menu_fail')):
         write_pcm(os.path.join(out, 'audio', 'sfx_' + n + '.pcm'), to_pcm(os.path.join(src, 'audio', rel + '.xnb'), 1))
     print('textos:', len(KEYS), '| musica: menu_intro, menu_loop | fuente de menu | title_hit, press_start, select, menu_open')
 

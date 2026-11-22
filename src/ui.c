@@ -12,10 +12,13 @@
 #include "audio.h"
 #include "jk/values.h"
 
-enum { T_PRESS_START, T_CONTINUE, T_NEW_GAME, T_RESUME, T_SAVE_EXIT, T_SURE, T_YES, T_NO, T_COUNT };
+enum { T_PRESS_START, T_CONTINUE, T_NEW_GAME, T_RESUME, T_SAVE_EXIT, T_SURE, T_YES, T_NO,
+       T_COPYRIGHT, T_SAVED, T_WORKSHOP, T_EXTRAS, T_OPTIONS, T_COUNT };
 
 #define WHITE 0x80808080
 #define RED   GS_SETREG_RGBAQ(0x80, 0x00, 0x00, 0x80, 0)
+#define GREEN GS_SETREG_RGBAQ(0x00, 0x80, 0x00, 0x80, 0)
+#define GRAY  GS_SETREG_RGBAQ(0x40, 0x40, 0x40, 0x80, 0)
 
 static char text[T_COUNT][256];
 static GSTEXTURE logo, frame, cursor;
@@ -113,7 +116,7 @@ int ui_init(GSGLOBAL *gs)
 enum { P_LOGO, P_WAIT, P_PRESS, P_PRESSED, P_MENU };
 static int phase, t, logo_frames, shake_tick, shake_skip, shake_mag, hit_played;
 static int has_save, title_sel;
-static item title_items[2];
+static item title_items[5];
 static int title_n;
 
 void ui_title_enter(int save)
@@ -122,8 +125,13 @@ void ui_title_enter(int save)
     shake_tick = -1; shake_skip = 0; shake_mag = 0; hit_played = 0;
     has_save = save;
     title_n = 0;
+    /* GameTitleScreen.CreateMenu: Continuar (si hay partida), Nueva partida en verde, Taller
+     * (enlace verde), Extras, Opciones. Salir solo existe en PC. */
     if (has_save) title_items[title_n++] = (item){ T_CONTINUE, 1, WHITE };
-    title_items[title_n++] = (item){ T_NEW_GAME, 1, WHITE };
+    title_items[title_n++] = (item){ T_NEW_GAME, 1, GREEN };
+    title_items[title_n++] = (item){ T_WORKSHOP, 1, GREEN };
+    title_items[title_n++] = (item){ T_EXTRAS, 1, WHITE };
+    title_items[title_n++] = (item){ T_OPTIONS, 1, WHITE };
     title_sel = 0;
     audio_music("menu_intro", "menu_loop");
 }
@@ -166,8 +174,12 @@ int ui_title_update(int pressed)
         if (pressed & UI_UP)   title_sel = move_sel(title_items, title_n, title_sel, -1);
         if (pressed & UI_DOWN) title_sel = move_sel(title_items, title_n, title_sel, 1);
         if (pressed & UI_OK) {
-            audio_music(NULL, NULL);
-            return title_items[title_sel].id == T_CONTINUE ? UI_CONTINUE : UI_NEW_GAME;
+            int id = title_items[title_sel].id;
+            if (id == T_CONTINUE || id == T_NEW_GAME) {
+                audio_music(NULL, NULL);
+                return id == T_CONTINUE ? UI_CONTINUE : UI_NEW_GAME;
+            }
+            audio_play_sfx(SFX_MENU_FAIL);       /* Taller/Extras/Opciones: aun no portados */
         }
         break;
     }
@@ -192,6 +204,12 @@ void ui_title_draw(GSGLOBAL *gs, float sx, float sy)
         font_draw(gs, &menufont, text[T_PRESS_START], 240.0f - w / 2.0f, 230.0f - menufont.line / 2.0f, sx, sy, WHITE);
     }
     if (phase == P_MENU) {
+        /* TextHelper.DrawString(pos, anclaje): se resta anclaje * tamano */
+        float cw = font_width(&menufont, text[T_COPYRIGHT]);
+        (void)cw;
+        font_draw(gs, &menufont, text[T_COPYRIGHT], 337.0f, 30.0f + 0.5f * menufont.line, sx, sy, GRAY);
+        float sw = font_width(&menufont, text[T_SAVED]);
+        font_draw(gs, &menufont, text[T_SAVED], 462.0f - sw, 352.0f - menufont.line, sx, sy, GRAY);
         gui_format f = PAUSE_FMT;
         f.ax = 0.0f;
         f.by = 160;

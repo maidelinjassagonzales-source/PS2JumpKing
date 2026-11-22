@@ -237,7 +237,9 @@ int main(void)
         audio_update();
 
         gsKit_clear(gs, border);
-        if (lv->grid) {
+        if (state == ST_TITLE) {
+            /* GameTitleScreen.DrawBG: fondo negro */
+        } else if (lv->grid) {
             draw_layer(gs, 0);
             draw_layer(gs, 1);
             npc_draw(gs, k.screen, SX, SY);
@@ -249,13 +251,14 @@ int main(void)
                 }
         }
         int frame = king_frame(&k, in, &walk_tick);
-        if (have_sheet) {                    /* en el titulo el rey espera de pie (FollyPlayer) */
+        if (state == ST_TITLE) {
+        } else if (have_sheet) {
             draw_king(gs, &sheet, &k, frame);
         } else {
             jk_rect hb = jk_body_hitbox(&k.body);
             draw_rect(gs, hb.x, hb.y, hb.w, hb.h, k.screen, kingc);
         }
-        if (lv->grid) {
+        if (lv->grid && state != ST_TITLE) {
             draw_layer(gs, 2);
             npc_draw_bubbles(gs, k.screen, SX, SY);
         }

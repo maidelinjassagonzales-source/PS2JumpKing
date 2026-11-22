@@ -135,6 +135,7 @@ int audio_init(void)
     load_sfx(SFX_PRESS_START, "audio/sfx_press_start.pcm");
     load_sfx(SFX_SELECT, "audio/sfx_select.pcm");
     load_sfx(SFX_MENU_OPEN, "audio/sfx_menu_open.pcm");
+    load_sfx(SFX_MENU_FAIL, "audio/sfx_menu_fail.pcm");
     ok = 1;
     return 0;
 }
