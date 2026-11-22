@@ -57,6 +57,8 @@ int items_init(GSGLOBAL *gs)
     return 0;
 }
 
+void items_give(int item) { if (item >= 0 && item < ITEM_KINDS) inventory[item]++; }
+
 int  items_is_wearable(int item) { return item >= 0 && item < ITEM_KINDS && skin_layer[item] >= 0; }
 int *items_equip_flag(int item) { return &equipped[item]; }
 

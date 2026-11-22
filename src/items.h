@@ -17,6 +17,7 @@ const char *items_name(int item);
 int  items_save(unsigned char *out, int max);
 void items_load(const unsigned char *in, int size);
 void items_reset(void);
+void items_give(int item);                               /* lo agrega al inventario */
 
 /* Prendas (SkinManager): una por capa (capa, botas, camisa, anillo, sombrero), dibujadas sobre el rey. */
 int  items_is_wearable(int item);

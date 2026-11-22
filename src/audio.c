@@ -149,6 +149,12 @@ int audio_init(void)
     load_sfx(SFX_BIRD0, "audio/bird0.pcm");
     load_sfx(SFX_BIRD1, "audio/bird1.pcm");
     load_sfx(SFX_BIRD2, "audio/bird2.pcm");
+    load_sfx(SFX_PLINK, "audio/sfx_plink.pcm");
+    load_sfx(SFX_BABE_JUMP, "audio/sfx_babe_jump.pcm");
+    load_sfx(SFX_BABE_KISS, "audio/sfx_babe_kiss.pcm");
+    load_sfx(SFX_BABE_MOU, "audio/sfx_babe_mou.pcm");
+    load_sfx(SFX_BABE_SCREAM, "audio/sfx_babe_scream.pcm");
+    load_sfx(SFX_BABE_SURPRISED, "audio/sfx_babe_surprised.pcm");
     ok = 1;
     return 0;
 }

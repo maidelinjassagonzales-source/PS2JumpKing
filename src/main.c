@@ -17,6 +17,7 @@
 #include "walls.h"
 #include "props.h"
 #include "items.h"
+#include "ending.h"
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -39,12 +40,14 @@ static void pad_init(void)
 
 /* Botones de menu de este frame (UI_*), ya en flanco de pulsacion. */
 static int pad_menu, pad_menu_prev;
+static u32 pad_raw;                   /* botones crudos de este frame (atajos de depuracion) */
 
 /* Lee los dos puertos: cruceta o stick izquierdo para andar, X para saltar, Start para pausa. */
 static jk_input pad_read(void)
 {
     jk_input in = {0, 0, 0};
     int menu = 0;
+    u32 raw_all = 0;
     for (int p = 0; p < 2; p++) {
         struct padButtonStatus st;
         int s = padGetState(p, 0);
@@ -57,6 +60,7 @@ static jk_input pad_read(void)
         }
         if (padRead(p, 0, &st) == 0) continue;
         u32 b = 0xFFFF ^ st.btns;
+        raw_all |= b;
         int lx = 0, ly = 0;
         if ((st.mode >> 4) == 0x7) {        /* DualShock en analogico */
             lx = (int)st.ljoy_h - 128;
@@ -74,6 +78,7 @@ static jk_input pad_read(void)
         in.jump  |= (b & PAD_CROSS) != 0;
     }
     pad_menu = menu & ~pad_menu_prev;
+    pad_raw = raw_all;
     pad_menu_prev = menu;
     return in;
 }
@@ -150,10 +155,13 @@ static void load_screen_layers(GSGLOBAL *gs, int screen)
     loaded_screen = screen;
 }
 
+static float cam_ox, cam_oy;          /* desplazamiento de camara (final) */
+
 static void draw_layer(GSGLOBAL *gs, int i)
 {
     if (!layer_ok[i]) return;
-    gsKit_prim_sprite_texture(gs, &layer[i], 0.0f, 0.0f, 0.0f, 0.0f, 640.0f, 448.0f,
+    float x = cam_ox * SX, y = cam_oy * SY;
+    gsKit_prim_sprite_texture(gs, &layer[i], x, y, 0.0f, 0.0f, x + 640.0f, y + 448.0f,
                               (float)layer[i].Width, (float)layer[i].Height, 2, 0x80808080);
 }
 
@@ -256,7 +264,7 @@ int main(void)
     jk_king k;
     jk_king_init(&k, 240.0f, 200.0f);   /* posicion inicial del original */
     float walk_tick = 0.0f;
-    enum { ST_LOGO, ST_TITLE, ST_INTRO, ST_PLAY, ST_PAUSE } state = ST_LOGO;
+    enum { ST_LOGO, ST_TITLE, ST_INTRO, ST_PLAY, ST_PAUSE, ST_ENDING } state = ST_LOGO;
     int has_save = save_exists();
     if (has_save) game_load(&k);              /* opciones y estadisticas para el titulo */
     (void)has_save;                           /* el titulo se abre tras el logo */
@@ -275,6 +283,14 @@ int main(void)
         if (state == ST_LOGO) {
             if (ui_logo_update(pad_menu)) { state = ST_TITLE; ui_title_enter(has_save); }
             in.left = in.right = in.jump = 0;
+        } else if (state == ST_ENDING) {
+            in.left = in.right = in.jump = 0;
+            if (ending_update(pad_menu != 0)) {
+                game_save(&k);
+                state = ST_TITLE;
+                ui_title_enter(1);
+                loaded_screen = -1;
+            }
         } else if (state == ST_INTRO) {
             if (ui_intro_update()) state = ST_PLAY;
             in.left = in.right = in.jump = 0;
@@ -312,6 +328,17 @@ int main(void)
             state = ST_PAUSE;
             ui_pause_enter();
         }
+        /* atajo de depuracion para probar el final: L1 + R1 + Select en partida */
+        if (state == ST_PLAY && (pad_raw & PAD_L1) && (pad_raw & PAD_R1) && (pad_raw & PAD_SELECT)) {
+            k.screen = 42;
+            if (lv->grid) { load_screen_layers(gs, 42); }
+            ending_start(gs, &k);
+            state = ST_ENDING;
+        }
+        if (state == ST_PLAY && ending_check(&k)) {      /* NormalEnding.CheckWin */
+            ending_start(gs, &k);
+            state = ST_ENDING;
+        }
         if (state == ST_PLAY) {
             jk_king_update(&k, lv, in);
             audio_set_screen(k.screen);
@@ -325,7 +352,7 @@ int main(void)
         } else {
             in.left = in.right = in.jump = 0;
         }
-        if (lv->grid && k.screen != loaded_screen) {
+        if (lv->grid && k.screen != loaded_screen && state != ST_ENDING) {
             load_screen_layers(gs, k.screen);
             assets_pool_reset();
         }
@@ -333,6 +360,8 @@ int main(void)
         if (k.events & JK_EV_LAND)  audio_play_sfx(SFX_LAND);
         if (k.events & JK_EV_BUMP)  audio_play_sfx(SFX_BUMP);
         if (k.events & JK_EV_SPLAT) audio_play_sfx(SFX_SPLAT);
+        ending_camera(&cam_ox, &cam_oy);
+        if (state != ST_ENDING) cam_ox = cam_oy = 0;
         if (state == ST_PLAY) {
             npc_update(gs, &k, JK_DT);
             signs_update(&k, in, JK_DT);
@@ -352,9 +381,11 @@ int main(void)
         } else if (lv->grid) {
             draw_layer(gs, 0);
             draw_layer(gs, 1);
-            props_draw(gs, k.screen, SX, SY);
-            items_draw(gs, k.screen, SX, SY);
-            npc_draw(gs, k.screen, SX, SY);
+            if (state != ST_ENDING) {
+                props_draw(gs, k.screen, SX, SY);
+                items_draw(gs, k.screen, SX, SY);
+                npc_draw(gs, k.screen, SX, SY);
+            }
         } else {
             for (int s = 0; s < lv->count; s++)
                 for (int i = 0; i < lv->screens[s].count; i++) {
@@ -365,14 +396,16 @@ int main(void)
         items_skins_apply(gs);                    /* aplica cambios de prendas (inventario, recogida, carga) */
         int frame = king_frame(&k, in, &walk_tick);
         if (state == ST_TITLE || state == ST_LOGO) {
+        } else if (state == ST_ENDING) {
+            ending_draw(gs, have_sheet ? &sheet : NULL, SX, SY);
         } else if (have_sheet) {
             draw_king(gs, &sheet, &k, frame);
         } else {
             jk_rect hb = jk_body_hitbox(&k.body);
             draw_rect(gs, hb.x, hb.y, hb.w, hb.h, k.screen, kingc);
         }
-        if (lv->grid && state != ST_TITLE && state != ST_LOGO) {
-            walls_draw(gs, k.screen, SX, SY);        /* tapan el interior, rey incluido */
+        if (lv->grid && state != ST_TITLE && state != ST_LOGO && !(state == ST_ENDING && ending_in_picture())) {
+            if (state != ST_ENDING) walls_draw(gs, k.screen, SX, SY);
             draw_layer(gs, 2);
             npc_draw_bubbles(gs, k.screen, SX, SY);
         }
