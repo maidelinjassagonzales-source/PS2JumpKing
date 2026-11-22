@@ -7,8 +7,8 @@
 #include "jk/values.h"
 
 #define MAX_NPC    40
-#define MAX_QUOTES 32
-#define MAX_LINES  8
+#define MAX_QUOTES 96
+#define MAX_LINES  16
 #define SLOTS      4
 #define SLOT_BYTES (192 * 1024)
 

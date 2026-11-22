@@ -74,7 +74,7 @@ def frames(node):
 
 
 def quote_lines(q):
-    return [ascii_text(s.text) for s in q.iter('string')][:8] if q is not None else []
+    return [ascii_text(s.text) for s in q.iter('string')][:16] if q is not None else []
 
 
 def pack_str(s):
@@ -124,7 +124,7 @@ def write_npcs(src, out):
         if loop is not None:
             for q in loop.iter('OldManQuote'):
                 quotes.append((2, 0, quote_lines(q)))
-        quotes = [q for q in quotes if q[2]][:32]
+        quotes = [q for q in quotes if q[2]][:96]
         b += struct.pack('<B', len(quotes))
         for kind, scr, lines in quotes:
             b += struct.pack('<BHB', kind, scr, len(lines)) + b''.join(pack_str(l) for l in lines)
