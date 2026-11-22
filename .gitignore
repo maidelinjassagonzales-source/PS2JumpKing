@@ -1,0 +1,8 @@
+# Material derivado del juego original: NUNCA al repo
+_ref/
+tools/_bin/
+*.xnb
+build/
+*.elf
+*.iso
+*.o
