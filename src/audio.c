@@ -144,6 +144,9 @@ int audio_init(void)
     load_sfx(SFX_SELECT, "audio/sfx_select.pcm");
     load_sfx(SFX_MENU_OPEN, "audio/sfx_menu_open.pcm");
     load_sfx(SFX_MENU_FAIL, "audio/sfx_menu_fail.pcm");
+    load_sfx(SFX_BIRD0, "audio/bird0.pcm");
+    load_sfx(SFX_BIRD1, "audio/bird1.pcm");
+    load_sfx(SFX_BIRD2, "audio/bird2.pcm");
     ok = 1;
     return 0;
 }

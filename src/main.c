@@ -15,6 +15,7 @@
 #include "ui.h"
 #include "save.h"
 #include "walls.h"
+#include "props.h"
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -93,6 +94,8 @@ static void game_save(const jk_king *k)
     blob[p] = u & 255; blob[p + 1] = u >> 8; p += 2 + u;
     int n = npc_save(blob + p + 2, SAVE_BLOB_MAX - p - 2);
     blob[p] = n & 255; blob[p + 1] = n >> 8; p += 2 + n;
+    int b = props_save(blob + p + 2, SAVE_BLOB_MAX - p - 2);
+    blob[p] = b & 255; blob[p + 1] = b >> 8; p += 2 + b;
     save_write(blob, p);
 }
 
@@ -110,6 +113,11 @@ static int game_load(jk_king *k)
     ui_load(blob + p, u); p += u;
     int n = blob[p] | blob[p + 1] << 8; p += 2;
     if (p + n <= size) npc_load(blob + p, n);
+    p += n;
+    if (p + 2 <= size) {
+        int b = blob[p] | blob[p + 1] << 8; p += 2;
+        if (p + b <= size) props_load(blob + p, b);
+    }
     return 0;
 }
 
@@ -222,6 +230,7 @@ int main(void)
     audio_init();
     npc_init(gs);
     walls_init(gs);
+    props_init(gs);
 
     ui_init(gs);
     save_init();
@@ -256,6 +265,7 @@ int main(void)
             } else if (r == UI_NEW_GAME || r == UI_CONTINUE) {
                 save_delete();
                 npc_reset();
+                props_reset();
                 ui_new_attempt();
                 jk_king_init(&k, 240.0f, 200.0f);
                 walk_tick = 0.0f;
@@ -299,6 +309,9 @@ int main(void)
             npc_update(gs, &k, JK_DT);
             signs_update(&k, in, JK_DT);
             walls_update(gs, &k, JK_DT);
+            props_update(gs, &k, JK_DT);
+            int bs = props_take_bird_sfx();
+            if (bs >= 0 && bs < 3) audio_play_sfx(SFX_BIRD0 + bs);
         }
         if (npc_take_talk_blip()) audio_play_sfx(SFX_TALK);
         audio_update();
@@ -309,6 +322,7 @@ int main(void)
         } else if (lv->grid) {
             draw_layer(gs, 0);
             draw_layer(gs, 1);
+            props_draw(gs, k.screen, SX, SY);
             npc_draw(gs, k.screen, SX, SY);
         } else {
             for (int s = 0; s < lv->count; s++)
