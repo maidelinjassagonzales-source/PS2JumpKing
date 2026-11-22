@@ -22,7 +22,8 @@ typedef struct {
     int nbusy, ntalk; frame busy[16], talk[16];
     int nq; quote q[MAX_QUOTES];
     /* estado */
-    int intro_done; unsigned said_mask; int loop_i;
+    /* OldManState: presentacion pendiente, pila de frases y mejor pantalla vista por este NPC */
+    int say_intro; int best; int pool[64]; int pool_n; int loop_i;
     float anim_t; int anim_f;
     float touch_t;
     int talking, cur_q, cur_line, shown; float char_t, hold_t;
@@ -37,7 +38,7 @@ static GSTEXTURE font_tex;
 static int font_ok;
 static short font_line; static float font_spacing;
 static struct { short g[4], c[4]; float k[3]; } glyph[224];
-static int loaded_screen = -2, best_screen, blip;
+static int loaded_screen = -2, quote_screen = -1, blip;
 
 static unsigned char *rd;
 static int  rd_u8(void)  { return *rd++; }
@@ -85,6 +86,7 @@ int npc_init(GSGLOBAL *gs)
             for (int l = 0; l < qq->n; l++) { qq->len[l] = rd_u8(); qq->line[l] = (const char *)rd; rd += qq->len[l]; }
         }
         p->slot = -1;
+        for (int q = 0; q < p->nq; q++) if (p->q[q].kind == 0) p->say_intro = 1;
         rd = next;
     }
     /* VRAM fija para las hojas de los NPC de la pantalla actual */
@@ -125,15 +127,33 @@ static void load_screen(GSGLOBAL *gs, int screen)
     loaded_screen = screen;
 }
 
+/* OldManComp.Update: al cambiar de pantalla, si es una pantalla nueva (mas alta que la mejor de
+ * este NPC) con frases propias, se apilan en orden inverso para que salgan en el orden del XML. */
+static void on_screen_change(int screen)
+{
+    int num = screen + 1;
+    for (int i = 0; i < npc_count; i++) {
+        npc *p = &npcs[i];
+        if (num <= p->best) continue;
+        int found = 0;
+        for (int q = p->nq - 1; q >= 0; q--)
+            if (p->q[q].kind == 1 && p->q[q].screen == num && p->pool_n < 64) {
+                p->pool[p->pool_n++] = q;
+                found = 1;
+            }
+        if (found) p->best = num;
+    }
+}
+
+/* OldManState.GetAndConsumeQuote + QuoteIndexer: presentacion, luego la pila (ultima apilada
+ * primero), y con la pila vacia las frases en bucle. */
 static int pick_quote(npc *p)
 {
-    if (!p->intro_done)
-        for (int q = 0; q < p->nq; q++) if (p->q[q].kind == 0) { p->intro_done = 1; return q; }
-    p->intro_done = 1;
-    for (int q = 0; q < p->nq; q++)
-        if (p->q[q].kind == 1 && !(p->said_mask & (1u << q)) && p->q[q].screen <= best_screen) {
-            p->said_mask |= 1u << q; return q;
-        }
+    if (p->say_intro) {
+        p->say_intro = 0;
+        for (int q = 0; q < p->nq; q++) if (p->q[q].kind == 0) return q;
+    }
+    if (p->pool_n > 0) return p->pool[--p->pool_n];
     int loops = 0;
     for (int q = 0; q < p->nq; q++) if (p->q[q].kind == 2) loops++;
     if (!loops) return -1;
@@ -144,7 +164,7 @@ static int pick_quote(npc *p)
 
 void npc_update(GSGLOBAL *gs, const jk_king *k, float dt)
 {
-    if (k->screen + 1 > best_screen) best_screen = k->screen + 1;
+    if (k->screen != quote_screen) { quote_screen = k->screen; on_screen_change(k->screen); }
     if (k->screen != loaded_screen) load_screen(gs, k->screen);
     jk_rect hb = jk_body_hitbox(&k->body);
 
