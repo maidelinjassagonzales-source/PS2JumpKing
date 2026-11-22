@@ -35,11 +35,12 @@ def main():
             frames = [float(f.text) for f in an.iter('float')][:16] if an is not None else []
             layers.append((tex[t], int(ly.findtext('position') or 0), float(ly.findtext('scroll_multiplier') or 0),
                            mode, fps, cx, cy, frames))
-        screens.append((int(m.group(1)), float(r.findtext('scroll_speed') or 0), layers))
+        fg = r.findtext('foreground') == 'true'          # ScrollingBGdata.foreground
+        screens.append((int(m.group(1)), float(r.findtext('scroll_speed') or 0), layers, fg))
     with open(os.path.join(out, 'scroll.bin'), 'wb') as f:
         f.write(b'JKSC' + struct.pack('<H', len(screens)))
-        for sc, speed, layers in screens:
-            f.write(struct.pack('<HfB', sc, speed, len(layers)))
+        for sc, speed, layers, fg in screens:
+            f.write(struct.pack('<HfBB', sc, speed, len(layers), int(fg)))
             for tid, pos, mul, mode, fps, cx, cy, frames in layers:
                 f.write(struct.pack('<HhfBfBBB', tid, pos, mul, mode, fps, cx, cy, len(frames)))
                 f.write(b''.join(struct.pack('<f', x) for x in frames))

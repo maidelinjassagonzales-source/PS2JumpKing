@@ -13,7 +13,7 @@ typedef struct {
     int slot;
 } layer;
 
-typedef struct { int screen1; float speed; int n; layer l[MAX_LAYERS]; } sscreen;
+typedef struct { int screen1; float speed; int n, fg; layer l[MAX_LAYERS]; } sscreen;
 
 static sscreen screens[MAX_SCREENS];
 static int nscreens, loaded = -2, gen;
@@ -30,7 +30,7 @@ int scroll_init(void)
     const unsigned char *p = b + 6;
     for (int i = 0; i < count && nscreens < MAX_SCREENS; i++) {
         sscreen *s = &screens[nscreens++];
-        s->screen1 = p[0] | p[1] << 8; s->speed = rf(p + 2); int nl = p[6]; p += 7;
+        s->screen1 = p[0] | p[1] << 8; s->speed = rf(p + 2); int nl = p[6]; s->fg = p[7]; p += 8;
         s->n = 0;
         for (int k = 0; k < nl; k++) {
             layer L; memset(&L, 0, sizeof L);
@@ -94,7 +94,10 @@ void scroll_draw(GSGLOBAL *gs, int screen, int foreground, float ox, float oy, f
     for (int i = 0; i < s->n; i++) {
         layer *L = &s->l[i];
         if (L->slot < 0) continue;
-        if (foreground ? L->mode == 1 : L->mode == 2) continue;   /* NULL se dibuja en ambas pasadas */
+        /* fondo: todo menos Foreground; frente: Foreground siempre y sin modo solo si la pantalla
+         * tiene foreground (ScrollingBackground.DrawForeground) */
+        if (!foreground && L->mode == 2) continue;
+        if (foreground && (L->mode == 1 || (L->mode == 0 && !s->fg))) continue;
         GSTEXTURE *t = &slot_tex[L->slot];
         int cx = L->cx ? L->cx : 1, cy = L->cy ? L->cy : 1;
         int w = t->Width / cx, h = t->Height / cy;
