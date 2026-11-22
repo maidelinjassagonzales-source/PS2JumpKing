@@ -26,8 +26,8 @@ src/audsrv_irx.c: $(PS2SDK)/iop/irx/audsrv.irx
 clean:
 	rm -f $(EE_BIN) $(EE_OBJS) src/audsrv_irx.c src/icon_sys.c src/icon_ico.c
 
-include $(PS2SDK)/samples/Makefile.pref
-include $(PS2SDK)/samples/Makefile.eeglobal
+-include $(PS2SDK)/samples/Makefile.pref
+-include $(PS2SDK)/samples/Makefile.eeglobal
 
 # Pruebas de la fisica en el PC (gcc nativo): make test
 JK_SRCS = src/jk/values.c src/jk/level.c src/jk/body.c src/jk/king.c src/jk/camera.c
