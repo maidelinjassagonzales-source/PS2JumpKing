@@ -29,14 +29,15 @@ def texture_rgba(path):
 
 
 def level_cells(src):
-    """Matriz [pantalla][y][x] de colores RGB, con el reparto por columnas del original."""
+    """Matriz [pantalla][y][x] de colores RGBA, con el reparto por columnas del original.
+    El vacio es negro transparente: los codigos se comparan con alfa 255, como Color en XNA."""
     img = texture_rgba(os.path.join(src, 'level.xnb'))
     rows = img.shape[0] // TILE_H                  # pantallas por columna
     cols = img.shape[1] // TILE_W
     screens = []
     for s in range(rows * cols):
         cx, cy = s // rows, s % rows
-        screens.append(img[cy * TILE_H:(cy + 1) * TILE_H, cx * TILE_W:(cx + 1) * TILE_W, :3])
+        screens.append(img[cy * TILE_H:(cy + 1) * TILE_H, cx * TILE_W:(cx + 1) * TILE_W])
     return screens
 
 
@@ -47,7 +48,7 @@ def write_level(src, out):
         for cells in screens:
             grid = np.zeros((TILE_H, TILE_W), np.uint8)
             for code, kind in BLOCK_CODES.items():
-                grid[np.all(cells == code, axis=2)] = kind
+                grid[np.all(cells == (*code, 255), axis=2)] = kind
             f.write(grid.tobytes())
     return len(screens)
 
