@@ -104,6 +104,7 @@ int audio_init(void)
     load_sfx(SFX_LAND, "audio/sfx_land.pcm");
     load_sfx(SFX_BUMP, "audio/sfx_bump.pcm");
     load_sfx(SFX_SPLAT, "audio/sfx_splat.pcm");
+    load_sfx(SFX_TALK, "audio/sfx_talk.pcm");
     ok = 1;
     return 0;
 }

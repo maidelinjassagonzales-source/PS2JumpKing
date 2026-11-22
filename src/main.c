@@ -11,7 +11,9 @@
 #include "jk/king.h"
 #include "assets.h"
 #include "audio.h"
+#include "npc.h"
 #include <stdio.h>
+#include <time.h>
 #include <string.h>
 
 #define VIEW_X 80   /* 480x360 centrado en 640x448 */
@@ -133,6 +135,13 @@ int main(void)
 
     GSGLOBAL *gs = gsKit_init_global();
     /* VRAM: framebuffer doble de 16 bits y sin Z-buffer, para que quepan las 3 capas y el rey. */
+    /* El original corre a 60 pasos por segundo y aqui hay un paso por refresco: forzar NTSC 60 Hz
+     * (con BIOS PAL gsKit elegia 50 Hz y todo iba al 83 %). */
+    gs->Mode = GS_MODE_NTSC;
+    gs->Interlace = GS_INTERLACED;
+    gs->Field = GS_FIELD;
+    gs->Width = 640;
+    gs->Height = 448;
     gs->PSM = GS_PSM_CT16;
     gs->ZBuffering = GS_SETTING_OFF;
     dmaKit_init(D_CTRL_RELE_OFF, D_CTRL_MFD_OFF, D_CTRL_STS_UNSPEC,
@@ -163,12 +172,21 @@ int main(void)
     memset(layer, 0, sizeof layer);
     int have_sheet = assets_t8(gs, "king.t8", &sheet, 0) == 0;
     audio_init();
+    npc_init(gs);
 
     jk_king k;
     jk_king_init(&k, 240.0f, 200.0f);   /* posicion inicial del original */
     float walk_tick = 0.0f;
 
+    clock_t fps_t0 = clock();
+    int fps_frames = 0, fps_reports = 0;
     for (;;) {
+        /* medicion: frames de logica por segundo real (va al log de PCSX2) */
+        if (++fps_frames == 300 && fps_reports < 20) {
+            clock_t t1 = clock();
+            printf("[jk] fps=%.2f\n", 300.0 * CLOCKS_PER_SEC / (double)(t1 - fps_t0));
+            fps_t0 = t1; fps_frames = 0; fps_reports++;
+        } else if (fps_frames == 300) fps_frames = 0;
         jk_input in = pad_read();
         jk_king_update(&k, lv, in);
         if (lv->grid && k.screen != loaded_screen)
@@ -178,12 +196,15 @@ int main(void)
         if (k.events & JK_EV_LAND)  audio_play_sfx(SFX_LAND);
         if (k.events & JK_EV_BUMP)  audio_play_sfx(SFX_BUMP);
         if (k.events & JK_EV_SPLAT) audio_play_sfx(SFX_SPLAT);
+        npc_update(gs, &k, JK_DT);
+        if (npc_take_talk_blip()) audio_play_sfx(SFX_TALK);
         audio_update();
 
         gsKit_clear(gs, border);
         if (lv->grid) {
             draw_layer(gs, 0);
             draw_layer(gs, 1);
+            npc_draw(gs, k.screen, SX, SY);
         } else {
             for (int s = 0; s < lv->count; s++)
                 for (int i = 0; i < lv->screens[s].count; i++) {

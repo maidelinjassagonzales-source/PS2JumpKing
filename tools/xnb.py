@@ -54,4 +54,37 @@ def read(path):
         loop_start, loop_len, dur = struct.unpack_from('<iii', buf, pos)
         return 'sound', dict(tag=tag, channels=ch, rate=rate, bits=bits, data=data,
                              loop_start=loop_start, loop_len=loop_len, ms=dur)
+    if 'SpriteFontReader' in reader:
+        return 'font', _read_spritefont(buf, pos)
     raise XnbError(f'{path}: lector {reader} no soportado')
+
+
+def _read_spritefont(buf, pos):
+    """SpriteFont: textura, rects de glifo, recortes, caracteres, interlineado, espaciado, kerning."""
+    _, pos = _read_7bit(buf, pos)                       # textura (objeto tipado)
+    fmt, w, h, mips = struct.unpack_from('<iIII', buf, pos); pos += 16
+    size, = struct.unpack_from('<I', buf, pos); pos += 4
+    tex = dict(w=w, h=h, fmt=fmt, rgba=buf[pos:pos + size]); pos += size
+    for _ in range(mips - 1):
+        sz, = struct.unpack_from('<I', buf, pos); pos += 4 + sz
+
+    def rects(pos):
+        _, pos = _read_7bit(buf, pos)
+        n, = struct.unpack_from('<i', buf, pos); pos += 4
+        r = [struct.unpack_from('<iiii', buf, pos + 16 * i) for i in range(n)]
+        return r, pos + 16 * n
+    glyphs, pos = rects(pos)
+    crops, pos = rects(pos)
+    _, pos = _read_7bit(buf, pos)
+    n, = struct.unpack_from('<i', buf, pos); pos += 4
+    chars = []
+    for _ in range(n):                                  # char en UTF-8
+        b = buf[pos]
+        ln = 1 if b < 0x80 else 2 if b < 0xE0 else 3 if b < 0xF0 else 4
+        chars.append(buf[pos:pos + ln].decode('utf-8')); pos += ln
+    line, = struct.unpack_from('<i', buf, pos); pos += 4
+    spacing, = struct.unpack_from('<f', buf, pos); pos += 4
+    _, pos = _read_7bit(buf, pos)
+    n, = struct.unpack_from('<i', buf, pos); pos += 4
+    kern = [struct.unpack_from('<fff', buf, pos + 12 * i) for i in range(n)]
+    return dict(texture=tex, glyphs=glyphs, crops=crops, chars=chars, line=line, spacing=spacing, kern=kern)

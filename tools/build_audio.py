@@ -79,7 +79,8 @@ def main():
     for name in ('king_jump', 'king_land', 'king_bump', 'king_splat'):
         write_pcm(os.path.join(out, 'audio', f'sfx_{name[5:]}.pcm'),
                   to_pcm(os.path.join(src, 'jump_king', name + '.xnb'), 1))
-    print('efectos: jump, land, bump, splat')
+    write_pcm(os.path.join(out, 'audio', 'sfx_talk.pcm'), to_pcm(os.path.join(src, 'talking.xnb'), 1))
+    print('efectos: jump, land, bump, splat, talk')
 
 
 if __name__ == '__main__':
