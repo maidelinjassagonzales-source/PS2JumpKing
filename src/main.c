@@ -264,7 +264,7 @@ int main(void)
     jk_king k;
     jk_king_init(&k, 240.0f, 200.0f);   /* posicion inicial del original */
     float walk_tick = 0.0f;
-    enum { ST_LOGO, ST_TITLE, ST_INTRO, ST_PLAY, ST_PAUSE, ST_ENDING } state = ST_LOGO;
+    enum { ST_LOGO, ST_TITLE, ST_INTRO, ST_PLAY, ST_PAUSE, ST_ENDING, ST_CREDITS, ST_PICTURE, ST_STATS } state = ST_LOGO;
     int has_save = save_exists();
     if (has_save) game_load(&k);              /* opciones y estadisticas para el titulo */
     (void)has_save;                           /* el titulo se abre tras el logo */
@@ -285,7 +285,16 @@ int main(void)
             in.left = in.right = in.jump = 0;
         } else if (state == ST_ENDING) {
             in.left = in.right = in.jump = 0;
-            if (ending_update(pad_menu != 0)) {
+            if (ending_update(pad_menu != 0)) { ui_credits_enter(); state = ST_CREDITS; }
+        } else if (state == ST_CREDITS) {
+            in.left = in.right = in.jump = 0;
+            if (ui_credits_update(pad_menu != 0)) { ending_show_picture(); state = ST_PICTURE; }
+        } else if (state == ST_PICTURE) {
+            in.left = in.right = in.jump = 0;
+            if (ending_update(pad_menu != 0)) { ui_stats_enter(); state = ST_STATS; }
+        } else if (state == ST_STATS) {
+            in.left = in.right = in.jump = 0;
+            if (ui_stats_update(pad_menu != 0)) {
                 game_save(&k);
                 state = ST_TITLE;
                 ui_title_enter(1);
@@ -362,6 +371,7 @@ int main(void)
         if (k.events & JK_EV_SPLAT) audio_play_sfx(SFX_SPLAT);
         ending_camera(&cam_ox, &cam_oy);
         if (state != ST_ENDING) cam_ox = cam_oy = 0;
+        int in_ending = state == ST_ENDING || state == ST_CREDITS || state == ST_PICTURE || state == ST_STATS;
         if (state == ST_PLAY) {
             npc_update(gs, &k, JK_DT);
             signs_update(&k, in, JK_DT);
@@ -396,7 +406,7 @@ int main(void)
         items_skins_apply(gs);                    /* aplica cambios de prendas (inventario, recogida, carga) */
         int frame = king_frame(&k, in, &walk_tick);
         if (state == ST_TITLE || state == ST_LOGO) {
-        } else if (state == ST_ENDING) {
+        } else if (in_ending) {
             ending_draw(gs, have_sheet ? &sheet : NULL, SX, SY);
         } else if (have_sheet) {
             draw_king(gs, &sheet, &k, frame);
@@ -411,6 +421,8 @@ int main(void)
         }
         if (state == ST_LOGO) ui_logo_draw(gs, SX, SY);
         if (state == ST_INTRO) ui_intro_draw(gs, SX, SY);
+        if (state == ST_CREDITS) ui_credits_draw(gs, SX, SY);
+        if (state == ST_STATS) ui_stats_draw(gs, SX, SY);
         if (state == ST_TITLE) ui_title_draw(gs, SX, SY);
         if (state == ST_PAUSE) ui_pause_draw(gs, SX, SY);
         (void)bar;

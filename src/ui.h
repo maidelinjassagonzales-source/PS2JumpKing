@@ -22,6 +22,13 @@ void ui_logo_draw(GSGLOBAL *gs, float sx, float sy);
 void ui_intro_enter(void);
 int  ui_intro_update(void);                         /* 1 = terminado: empieza a jugar */
 void ui_intro_draw(GSGLOBAL *gs, float sx, float sy);
+/* Tras el final: creditos (GameEnding, CREDITS_ROLL) y pantalla de estadisticas (StatsScreen) */
+void ui_credits_enter(void);
+int  ui_credits_update(int any_input);              /* 1 = terminado */
+void ui_credits_draw(GSGLOBAL *gs, float sx, float sy);
+void ui_stats_enter(void);
+int  ui_stats_update(int any_input);                /* 1 = terminado */
+void ui_stats_draw(GSGLOBAL *gs, float sx, float sy);
 /* opciones y estadisticas para el guardado */
 int  ui_save(unsigned char *out, int max);
 void ui_load(const unsigned char *in, int size);

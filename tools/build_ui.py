@@ -50,6 +50,7 @@ KEYS = [
     'MENUFACTORY_INPUT_BIND_SECONDARY',
     'PAUSEMANAGER_OPTIONS',
     'LANGUAGEMANAGER_GAME_INTRO_DESC',
+    'STATSSCREEEN_COMPLETED_ON_ATTEMPT',
 ]
 
 
@@ -91,6 +92,25 @@ def main():
             if k == 'MENUFACTORY_CREDIT_FONT_ATTRIBUTION':
                 t = t.replace('{0}', font_attr)
             f.write(pack(t))
+    # CREDITS_ROLL (GameEnding): cabecera (texto o clave de idioma) y personas
+    src_lm = open(os.path.join(decomp, 'JumpKing', 'LanguageManager.cs'), encoding='utf-8').read()
+    consts = dict(re.findall(r'public static string (_\w+) = "([^"]*)";', src_lm))
+    block = re.search(r'CREDITS_ROLL => new Credit\[\d+\]\s*\{(.*?)\};', src_lm, re.S).group(1)
+    def resolve(tok):
+        tok = tok.strip()
+        if tok.startswith('language.'):
+            return lang.get(tok[9:], tok[9:])
+        if tok.startswith('"'):
+            return tok.strip('"')
+        return consts.get(tok, tok)
+    roll = []
+    for args in re.findall(r'new Credit\(([^)]*)\)', block):
+        toks = [resolve(t) for t in args.split(',')]
+        roll.append((toks[0], toks[1:]))
+    with open(os.path.join(out, 'roll.bin'), 'wb') as f:
+        f.write(b'JKRL' + struct.pack('<B', len(roll)))
+        for h, ppl in roll:
+            f.write(pack(h.upper()) + struct.pack('<B', len(ppl)) + b''.join(pack(x) for x in ppl))
     with open(os.path.join(out, 'credits.bin'), 'wb') as f:
         f.write(b'JKCR' + struct.pack('<H', len(cred)))
         for name, role in cred:

@@ -235,14 +235,15 @@ int ending_update(int any_input)
         cam_x += scroll_dx; cam_y += scroll_dy;
         if (--scroll_left <= 0) signals |= SIG_SCROLL_OVER;
     }
+    if (done) return 1;                                          /* sigue: creditos (GameEnding) */
     run(&cherub); run(&babe); run(&king);
     anim_tick(&king); anim_tick(&babe);
-    if (done) { phase = 1; pic_t = 0; }
-    return 0;
+    return done;
 }
 
 void ending_camera(float *ox, float *oy) { *ox = phase == 0 ? cam_x : 0; *oy = phase == 0 ? cam_y : 0; }
 int  ending_in_picture(void) { return phase == 1; }
+void ending_show_picture(void) { phase = 1; pic_t = 0; }
 
 static void draw_spr(GSGLOBAL *gs, GSTEXTURE *t, const spr *s, float x, float y, int flip, float sx, float sy)
 {

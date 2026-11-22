@@ -19,7 +19,7 @@ enum {
     T_TOTAL_STATS, T_FONT_ATTR, T_JKPLUS_ATTR, T_SESSION, T_TIME, T_JUMPS, T_FALLS,
     T_GRAPHICS, T_CONTROLS, T_AUDIO, T_INGAME, T_TIMER_OPTS, T_QUICKLOAD, T_SHOW_TIMER,
     T_TIMER_DEFAULT, T_TIMER_PRECISE, T_MUSIC, T_SFX, T_AMBIENCE, T_SCAN, T_BIND1, T_BIND2,
-    T_PAUSE_OPTIONS, T_INTRO, T_COUNT
+    T_PAUSE_OPTIONS, T_INTRO, T_COMPLETED, T_COUNT
 };
 
 #define WHITE 0x80808080
@@ -714,6 +714,90 @@ void ui_intro_draw(GSGLOBAL *gs, float sx, float sy)
         text_size(&menufont, text[T_INTRO], &w, &h);
         u64 c = GS_SETREG_RGBAQ(0x80, 0x80, 0x80, (int)(a * 128.0f), 0);
         draw_text_ml(gs, &menufont, text[T_INTRO], 240.0f - w / 2.0f, 180.0f - h / 2.0f, sx, sy, c);
+    }
+}
+
+/* ---- creditos (GameEnding) ---- */
+
+#define MAX_ROLL 16
+static char roll_text[MAX_ROLL][8][96];
+static int roll_lines[MAX_ROLL], roll_n, roll_i;
+static float roll_t, roll_end_t;
+
+void ui_credits_enter(void)
+{
+    int n;
+    roll_n = 0; roll_i = 0; roll_t = 0; roll_end_t = -1;
+    unsigned char *b = assets_load("roll.bin", &n);
+    if (!b || memcmp(b, "JKRL", 4) != 0) return;
+    int count = b[4], p = 5;
+    for (int i = 0; i < count && roll_n < MAX_ROLL; i++) {
+        int l = b[p++], k = 0;
+        memcpy(roll_text[roll_n][0], b + p, l > 95 ? 95 : l); roll_text[roll_n][0][l > 95 ? 95 : l] = 0; p += l;
+        int ppl = b[p++];
+        for (int j = 0; j < ppl; j++) {
+            l = b[p++];
+            if (k < 7) { memcpy(roll_text[roll_n][1 + k], b + p, l > 95 ? 95 : l); roll_text[roll_n][1 + k][l > 95 ? 95 : l] = 0; k++; }
+            p += l;
+        }
+        roll_lines[roll_n++] = 1 + k;
+    }
+}
+
+/* tiempos de cada entrada: aparece 1 s, queda 3*(10/n)+2*(10/n)-2 s, se va 1 s */
+static float roll_stay(void) { return roll_n ? 5.0f * (10.0f / roll_n) - 2.0f : 0; }
+
+int ui_credits_update(int any_input)
+{
+    if (any_input && roll_end_t < 0) roll_end_t = 0;               /* SkipCredits */
+    if (roll_end_t >= 0) { roll_end_t += JK_DT; return roll_end_t >= 5.0f || any_input; }  /* fundido 3 s + 2 s */
+    roll_t += JK_DT;
+    if (roll_t >= 1.0f + roll_stay() + 1.0f) { roll_t = 0; if (++roll_i >= roll_n) roll_end_t = 0; }
+    return 0;
+}
+
+void ui_credits_draw(GSGLOBAL *gs, float sx, float sy)
+{
+    gsKit_prim_sprite(gs, 0, 0, JK_SCREEN_W * sx, JK_SCREEN_H * sy, 6, GS_SETREG_RGBAQ(0, 0, 0, 0x80, 0));
+    if (roll_i >= roll_n || roll_end_t >= 0) return;
+    float a = roll_t < 1.0f ? roll_t : roll_t < 1.0f + roll_stay() ? 1.0f : 1.0f - (roll_t - 1.0f - roll_stay());
+    if (a <= 0) return;
+    u64 c = GS_SETREG_RGBAQ(0x80, 0x80, 0x80, (int)(a * 128.0f), 0);
+    float y = 255.0f;
+    for (int j = 0; j < roll_lines[roll_i]; j++) {
+        float w = font_width(&menufont, roll_text[roll_i][j]);
+        font_draw(gs, &menufont, roll_text[roll_i][j], 240.0f - w / 2, y - menufont.line / 2.0f, sx, sy, c);
+        y += menufont.line + (j == 0 ? 4 : 0);
+    }
+}
+
+/* ---- estadisticas (StatsScreen) ---- */
+
+static char stats_screen[4][128];
+static int stats_t;
+
+void ui_stats_enter(void)
+{
+    char a[16], b2[16];
+    update_stats_text();
+    snprintf(a, sizeof a, "%d", st_attempt); snprintf(b2, sizeof b2, "%d", st_session);
+    fmt2(stats_screen[0], sizeof stats_screen[0], text[T_COMPLETED], a, b2);
+    strcpy(stats_screen[1], stat_lines[1]);
+    strcpy(stats_screen[2], stat_lines[2]);
+    strcpy(stats_screen[3], stat_lines[3]);
+    stats_t = 0;
+}
+
+int ui_stats_update(int any_input) { stats_t++; return stats_t > 30 && any_input; }
+
+void ui_stats_draw(GSGLOBAL *gs, float sx, float sy)
+{
+    gsKit_prim_sprite(gs, 0, 0, JK_SCREEN_W * sx, JK_SCREEN_H * sy, 6, GS_SETREG_RGBAQ(0, 0, 0, 0x80, 0));
+    float y = 180.0f - 50.0f;
+    for (int i = 0; i < 4; i++) {
+        float w = font_width(&menufont, stats_screen[i]);
+        font_draw(gs, &menufont, stats_screen[i], 240.0f - w / 2, y - menufont.line / 2.0f, sx, sy, WHITE);
+        y += menufont.line + 4;
     }
 }
 
