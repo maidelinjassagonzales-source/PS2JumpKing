@@ -8,3 +8,4 @@ build/
 *.o
 tests/host_sim
 assets_ps2/
+__pycache__/
