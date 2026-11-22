@@ -43,7 +43,21 @@ def main():
             f.write(struct.pack('<BB', 1 if it in SPRITE else 0, len(t)) + t)
         for it, sc, x, y in placed:
             f.write(struct.pack('<BHhh', it, sc, x, y))
-    print(f'objetos en el mundo: {len(placed)} | sprites: {len(SPRITE)} | nombres: {len(ITEMS)}')
+    # Prendas (king/king.xml, SkinSettings): hoja completa del rey por prenda, mismo recorte que la base
+    kdir = os.path.join(game, 'Content', 'king')
+    layers = {'Hat': 4, 'Boots': 1, 'SnakeRing': 3, 'Shirt': 2, 'Cape': 0}      # orden de dibujo de SkinManager
+    skins = []
+    for xml in (f for f in os.listdir(kdir) if f.endswith('.xml')):
+        for sk in ET.parse(os.path.join(kdir, xml)).getroot().iter('Skin'):
+            it, tex = sk.findtext('item'), sk.findtext('texture')
+            lay = sk.findtext('layers/SkinLayer')
+            if it in ITEMS and lay in layers and os.path.exists(os.path.join(kdir, tex + '.xnb')):
+                img = texture_rgba(os.path.join(kdir, tex + '.xnb'))
+                write_t8(img[0:192, 224:224 + 192], os.path.join(out, 'items', f'skin{ITEMS.index(it)}.t8'))
+                skins.append((ITEMS.index(it), layers[lay]))
+    with open(os.path.join(out, 'skins.bin'), 'wb') as f:
+        f.write(b'JKSK' + struct.pack('<B', len(skins)) + b''.join(struct.pack('<BB', i, l) for i, l in skins))
+    print(f'objetos en el mundo: {len(placed)} | sprites: {len(SPRITE)} | nombres: {len(ITEMS)} | prendas: {len(skins)}')
 
 
 if __name__ == '__main__':

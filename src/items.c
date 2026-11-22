@@ -16,6 +16,12 @@ static int ndefaults, nworld, loaded = -2, gen, pickup;
 static GSTEXTURE tex[ITEM_KINDS];
 static int tex_ok[ITEM_KINDS];
 
+/* prendas */
+static int skin_layer[ITEM_KINDS];          /* -1 = no se puede llevar */
+static int equipped[ITEM_KINDS], equipped_prev[ITEM_KINDS];
+static GSTEXTURE layer_tex[5];
+static int layer_item[5] = { -1, -1, -1, -1, -1 }, layer_ok[5], layers_alloc;
+
 int items_init(GSGLOBAL *gs)
 {
     int n;
@@ -35,9 +41,51 @@ int items_init(GSGLOBAL *gs)
         w->x = (short)(p[3] | p[4] << 8); w->y = (short)(p[5] | p[6] << 8);
         w->taken = 0;
     }
+    for (int i = 0; i < ITEM_KINDS; i++) skin_layer[i] = -1;
+    b = assets_load("skins.bin", &n);
+    if (b && memcmp(b, "JKSK", 4) == 0)
+        for (int i = 0; i < b[4]; i++)
+            if (b[5 + i * 2] < ITEM_KINDS) skin_layer[b[5 + i * 2]] = b[6 + i * 2];
+    /* VRAM fija para una prenda por capa (hojas de 192x192) */
+    for (int l = 0; l < 5; l++) {
+        memset(&layer_tex[l], 0, sizeof layer_tex[l]);
+        layer_tex[l].Vram = gsKit_vram_alloc(gs, gsKit_texture_size(192, 192, GS_PSM_T8), GSKIT_ALLOC_USERBUFFER);
+        layer_tex[l].VramClut = gsKit_vram_alloc(gs, gsKit_texture_size(16, 16, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
+    }
+    layers_alloc = 1;
     items_reset();
-    (void)gs;
     return 0;
+}
+
+int  items_is_wearable(int item) { return item >= 0 && item < ITEM_KINDS && skin_layer[item] >= 0; }
+int *items_equip_flag(int item) { return &equipped[item]; }
+
+/* Una prenda por capa: si se equipan dos de la misma capa, queda la ultima. */
+void items_skins_apply(GSGLOBAL *gs)
+{
+    for (int i = 0; i < ITEM_KINDS; i++)
+        if (equipped[i] && !equipped_prev[i] && skin_layer[i] >= 0)
+            for (int j = 0; j < ITEM_KINDS; j++)
+                if (j != i && skin_layer[j] == skin_layer[i]) equipped[j] = 0;
+    for (int l = 0; l < 5; l++) {
+        int want = -1;
+        for (int i = 0; i < ITEM_KINDS; i++)
+            if (equipped[i] && inventory[i] > 0 && skin_layer[i] == l) want = i;
+        if (want == layer_item[l]) continue;
+        layer_item[l] = want; layer_ok[l] = 0;
+        if (want >= 0 && layers_alloc) {
+            char name[32]; snprintf(name, sizeof name, "items/skin%d.t8", want);
+            layer_ok[l] = assets_t8(gs, name, &layer_tex[l], 1) == 0;
+        }
+    }
+    memcpy(equipped_prev, equipped, sizeof equipped);
+}
+
+void items_skins_draw(GSGLOBAL *gs, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1)
+{
+    for (int l = 0; l < 5; l++)                 /* Cape, Boots, Shirt, SnakeRing, Hat */
+        if (layer_item[l] >= 0 && layer_ok[l])
+            gsKit_prim_sprite_texture(gs, &layer_tex[l], x0, y0, u0, v0, x1, y1, u1, v1, 3, 0x80808080);
 }
 
 void items_reset(void)
@@ -45,6 +93,7 @@ void items_reset(void)
     memcpy(world, defaults, sizeof world);
     nworld = ndefaults;
     memset(inventory, 0, sizeof inventory);
+    memset(equipped, 0, sizeof equipped);
     loaded = -2;
 }
 
@@ -88,6 +137,7 @@ void items_update(GSGLOBAL *gs, const jk_king *k)
         if (jk_rect_overlap(&r, &hb)) {           /* WorldItemComp: tocarlo lo recoge */
             w->taken = 1;
             inventory[w->item]++;
+            if (skin_layer[w->item] >= 0) { equipped[w->item] = 1; items_skins_apply(gs); }   /* se pone al recogerla */
             pickup = 1;
         }
     }
@@ -114,7 +164,7 @@ const char *items_name(int item) { return (item >= 0 && item < ITEM_KINDS) ? nam
 /* guardado: inventario + objetos del mundo (recogidos o soltados por pajaros) */
 int items_save(unsigned char *out, int max)
 {
-    int need = ITEM_KINDS + 1 + nworld * 8;
+    int need = ITEM_KINDS * 2 + 1 + nworld * 8;
     if (max < need) return 0;
     int p = 0;
     for (int i = 0; i < ITEM_KINDS; i++) out[p++] = (unsigned char)inventory[i];
@@ -126,6 +176,7 @@ int items_save(unsigned char *out, int max)
         out[p++] = w->x & 255; out[p++] = (w->x >> 8) & 255;
         out[p++] = w->y & 255; out[p++] = (w->y >> 8) & 255;
     }
+    for (int i = 0; i < ITEM_KINDS; i++) out[p++] = (unsigned char)equipped[i];
     return p;
 }
 
@@ -143,5 +194,10 @@ void items_load(const unsigned char *in, int size)
         w->x = (short)(in[p + 4] | in[p + 5] << 8);
         w->y = (short)(in[p + 6] | in[p + 7] << 8);
     }
+    memset(equipped, 0, sizeof equipped);
+    if (p + ITEM_KINDS <= size)
+        for (int i = 0; i < ITEM_KINDS; i++) equipped[i] = in[p + i];
+    memset(equipped_prev, 0, sizeof equipped_prev);
+    for (int l = 0; l < 5; l++) layer_item[l] = -2;   /* fuerza recarga en el proximo apply */
     loaded = -2;
 }

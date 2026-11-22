@@ -308,7 +308,10 @@ static void build_inventory(void)
         if (c <= 0) continue;
         if (c > 1) snprintf(inv_lines[i], sizeof inv_lines[i], "%s x%d", items_name(i), c);
         else snprintf(inv_lines[i], sizeof inv_lines[i], "%s", items_name(i));
-        add(m, (item){ K_BUTTON, inv_lines[i], WHITE, 0, A_NONE, 0, 0, 0, 0, 0 });
+        if (items_is_wearable(i))             /* ToggleSkin: casilla para ponerse/quitarse la prenda */
+            add(m, (item){ K_TOGGLE, inv_lines[i], WHITE, 0, A_NONE, 0, items_equip_flag(i), 0, 0, 0 });
+        else
+            add(m, (item){ K_BUTTON, inv_lines[i], WHITE, 0, A_NONE, 0, 0, 0, 0, 0 });
     }
     finish(m);
 }

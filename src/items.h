@@ -17,4 +17,10 @@ const char *items_name(int item);
 int  items_save(unsigned char *out, int max);
 void items_load(const unsigned char *in, int size);
 void items_reset(void);
+
+/* Prendas (SkinManager): una por capa (capa, botas, camisa, anillo, sombrero), dibujadas sobre el rey. */
+int  items_is_wearable(int item);
+int *items_equip_flag(int item);                         /* para la casilla del inventario */
+void items_skins_apply(GSGLOBAL *gs);                    /* tras cambiar lo equipado */
+void items_skins_draw(GSGLOBAL *gs, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1);
 #endif

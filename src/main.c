@@ -192,6 +192,8 @@ static void draw_king(GSGLOBAL *gs, GSTEXTURE *sheet, const jk_king *k, int fram
     if (k->facing < 0) { float t = u0; u0 = u1; u1 = t; }
     gsKit_prim_sprite_texture(gs, sheet, x0, y0, u0, v0, x0 + 48.0f * SX, y0 + 48.0f * SY,
                               u1, v0 + 48.0f, 3, 0x80808080);
+    /* prendas equipadas encima, con el mismo recorte (KingSprites por capa) */
+    items_skins_draw(gs, x0, y0, x0 + 48.0f * SX, y0 + 48.0f * SY, u0, v0, u1, v0 + 48.0f);
 }
 
 int main(void)
@@ -353,6 +355,7 @@ int main(void)
                     draw_rect(gs, r->x, r->y, r->w, r->h, k.screen, wall);
                 }
         }
+        items_skins_apply(gs);                    /* aplica cambios de prendas (inventario, recogida, carga) */
         int frame = king_frame(&k, in, &walk_tick);
         if (state == ST_TITLE) {
         } else if (have_sheet) {
