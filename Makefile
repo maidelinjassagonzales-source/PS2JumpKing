@@ -1,6 +1,6 @@
 # Jump King PS2 - port homebrew (PS2SDK + gsKit). Compilar (WSL): make
 EE_BIN  = jumpking_ps2.elf
-EE_OBJS = src/main.o src/assets.o src/audio.o src/npc.o src/ui.o src/audsrv_irx.o src/jk/values.o src/jk/level.o src/jk/body.o src/jk/king.o src/jk/camera.o
+EE_OBJS = src/main.o src/assets.o src/audio.o src/npc.o src/ui.o src/font.o src/audsrv_irx.o src/jk/values.o src/jk/level.o src/jk/body.o src/jk/king.o src/jk/camera.o
 
 EE_INCS    += -Isrc -I$(GSKIT)/include
 EE_LDFLAGS += -L$(GSKIT)/lib

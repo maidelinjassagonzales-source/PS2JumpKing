@@ -249,9 +249,7 @@ int main(void)
                 }
         }
         int frame = king_frame(&k, in, &walk_tick);
-        if (state == ST_TITLE) {
-            /* en el titulo no hay rey: solo el escenario de la primera pantalla */
-        } else if (have_sheet) {
+        if (have_sheet) {                    /* en el titulo el rey espera de pie (FollyPlayer) */
             draw_king(gs, &sheet, &k, frame);
         } else {
             jk_rect hb = jk_body_hitbox(&k.body);

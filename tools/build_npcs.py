@@ -48,17 +48,17 @@ def ascii_text(s):
     return t.encode('latin-1', 'replace').decode('latin-1')
 
 
-def write_font(src, out):
-    k, f = xnb.read(os.path.join(src, 'font', 'sf_pixolde.xnb'))
+def write_font(src, out, font='sf_pixolde', name='font'):
+    k, f = xnb.read(os.path.join(src, 'font', font + '.xnb'))
     t = f['texture']
     rgba = dxt3_to_rgba(t['rgba'], t['w'], t['h']) if t['fmt'] == 5 else \
         np.frombuffer(t['rgba'], np.uint8).reshape(t['h'], t['w'], 4)
-    write_t8(rgba, os.path.join(out, 'font.t8'))
+    write_t8(rgba, os.path.join(out, name + '.t8'))
     table = {}
     for ch, g, c, kn in zip(f['chars'], f['glyphs'], f['crops'], f['kern']):
         if len(ch) == 1 and 32 <= ord(ch) < 256:
             table[ord(ch)] = (g, c, kn)
-    with open(os.path.join(out, 'font.bin'), 'wb') as fo:
+    with open(os.path.join(out, name + '.bin'), 'wb') as fo:
         fo.write(b'JKFN' + struct.pack('<hf', f['line'], f['spacing']))
         for code in range(32, 256):                       # 224 entradas fijas (Latin-1)
             g, c, kn = table.get(code, ((0, 0, 0, 0), (0, 0, 0, 0), (0.0, 0.0, 0.0)))

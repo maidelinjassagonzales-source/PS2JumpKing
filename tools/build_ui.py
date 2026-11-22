@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_assets import write_t8, texture_rgba
 from build_audio import to_pcm, write_pcm
+from build_npcs import write_font
 
 # Claves de texto que usa el port (en este orden; el ELF las lee por indice).
 KEYS = [
@@ -37,7 +38,11 @@ def main():
     os.makedirs(os.path.join(out, 'audio'), exist_ok=True)
     for n in ('menu_intro', 'menu_loop'):
         write_pcm(os.path.join(out, 'audio', n + '.pcm'), to_pcm(os.path.join(mus, n + '.xnb'), 2))
-    print('textos:', len(KEYS), '| musica: menu_intro, menu_loop')
+    write_font(src, out, 'sf_litter_lover2_bold', 'menufont')     # FontManager.MenuFont
+    for n, rel in (('title_hit', 'gui_sfx/title_hit'), ('press_start', 'press_start'),
+                   ('select', 'gui_sfx/selectC'), ('menu_open', 'gui_sfx/menu_open')):
+        write_pcm(os.path.join(out, 'audio', 'sfx_' + n + '.pcm'), to_pcm(os.path.join(src, 'audio', rel + '.xnb'), 1))
+    print('textos:', len(KEYS), '| musica: menu_intro, menu_loop | fuente de menu | title_hit, press_start, select, menu_open')
 
 
 if __name__ == '__main__':
