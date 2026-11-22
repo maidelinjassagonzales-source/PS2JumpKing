@@ -26,7 +26,7 @@ typedef struct {
 static ptype types[MAX_TYPES];
 static prop props[MAX_PROPS];
 static bird birds[MAX_BIRDS];
-static int ntypes, nprops, nbirds, loaded = -2, pending_sfx = -1;
+static int ntypes, nprops, nbirds, loaded = -2, pending_sfx = -1, gen;
 static GSTEXTURE slot_tex[SLOTS];
 static int slot_of_type[MAX_TYPES], bird_slot[MAX_BIRDS];
 
@@ -69,11 +69,7 @@ int props_init(GSGLOBAL *gs)
             if (bd->npos > MAX_BPOS) bd->npos = MAX_BPOS;
         }
     }
-    for (int s = 0; s < SLOTS; s++) {
-        memset(&slot_tex[s], 0, sizeof slot_tex[s]);
-        slot_tex[s].Vram = gsKit_vram_alloc(gs, SLOT_BYTES, GSKIT_ALLOC_USERBUFFER);
-        slot_tex[s].VramClut = gsKit_vram_alloc(gs, gsKit_texture_size(16, 16, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
-    }
+    for (int s = 0; s < SLOTS; s++) memset(&slot_tex[s], 0, sizeof slot_tex[s]);
     return 0;
 }
 
@@ -85,16 +81,17 @@ static void load_screen(GSGLOBAL *gs, int screen)
         prop *p = &props[i];
         if (p->screen1 - 1 != screen || slot_of_type[p->type] >= 0) continue;
         char name[32]; snprintf(name, sizeof name, "props/p%d.t8", p->type);
-        if (assets_t8(gs, name, &slot_tex[used], 1) == 0) slot_of_type[p->type] = used++;
+        if (assets_t8_pool(gs, name, &slot_tex[used]) == 0) slot_of_type[p->type] = used++;
     }
     for (int i = 0; i < nbirds; i++) {
         bird_slot[i] = -1;
         bird *b = &birds[i];
         if (b->done || b->home >= b->npos || b->pos[b->home].screen1 - 1 != screen || used >= SLOTS) continue;
         char name[32]; snprintf(name, sizeof name, "props/bird%d.t8", b->tex);
-        if (assets_t8(gs, name, &slot_tex[used], 1) == 0) bird_slot[i] = used++;
+        if (assets_t8_pool(gs, name, &slot_tex[used]) == 0) bird_slot[i] = used++;
     }
     loaded = screen;
+    gen = assets_pool_generation();
 }
 
 static float bird_real_y(const bpos *q) { return (float)(q->y - (q->screen1 - 1) * JK_SCREEN_H); }
@@ -108,7 +105,7 @@ static int fly_dir_vertical(const bird *b)
 
 void props_update(GSGLOBAL *gs, const jk_king *k, float dt)
 {
-    if (k->screen != loaded) load_screen(gs, k->screen);
+    if (k->screen != loaded || gen != assets_pool_generation()) load_screen(gs, k->screen);
     for (int i = 0; i < nprops; i++) {
         prop *p = &props[i];
         if (p->screen1 - 1 != k->screen) continue;
@@ -157,7 +154,7 @@ void props_update(GSGLOBAL *gs, const jk_king *k, float dt)
         if (b->px < -48 || b->px > JK_SCREEN_W + 48 || sy < -48 || sy > JK_SCREEN_H + 48) {
             b->fleeing = 0;                                      /* OnFlee: siguiente posicion */
             if (++b->home >= b->npos) { b->home = b->npos - 1; if (b->is_fly) b->done = 1; }
-            loaded = -2;
+            if (b->pos[b->home].screen1 - 1 != k->screen) bird_slot[i] = -1;   /* su textura llega con esa pantalla */
         }
     }
 }
@@ -210,11 +207,11 @@ void props_load(const unsigned char *in, int size)
     for (int i = 0; i < n && i < nbirds && 2 + i * 2 < size + 1; i++) {
         birds[i].home = in[1 + i * 2]; birds[i].done = in[2 + i * 2]; birds[i].fleeing = 0;
     }
-    loaded = -2;
+    assets_pool_reset();
 }
 
 void props_reset(void)
 {
     for (int i = 0; i < nbirds; i++) { birds[i].home = 0; birds[i].done = 0; birds[i].fleeing = 0; }
-    loaded = -2;
+    assets_pool_reset();
 }

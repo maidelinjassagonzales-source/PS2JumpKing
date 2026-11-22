@@ -38,7 +38,7 @@ static GSTEXTURE font_tex;
 static int font_ok;
 static short font_line; static float font_spacing;
 static struct { short g[4], c[4]; float k[3]; } glyph[224];
-static int loaded_screen = -2, quote_screen = -1, blip;
+static int loaded_screen = -2, quote_screen = -1, blip, npc_gen;
 
 static unsigned char *rd;
 static int  rd_u8(void)  { return *rd++; }
@@ -89,13 +89,7 @@ int npc_init(GSGLOBAL *gs)
         for (int q = 0; q < p->nq; q++) if (p->q[q].kind == 0) p->say_intro = 1;
         rd = next;
     }
-    /* VRAM fija para las hojas de los NPC de la pantalla actual */
-    for (int s = 0; s < SLOTS; s++) {
-        memset(&slot_tex[s], 0, sizeof slot_tex[s]);
-        slot_tex[s].Vram = gsKit_vram_alloc(gs, SLOT_BYTES, GSKIT_ALLOC_USERBUFFER);
-        slot_tex[s].VramClut = gsKit_vram_alloc(gs, gsKit_texture_size(16, 16, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
-        slot_owner[s] = -1;
-    }
+    for (int s = 0; s < SLOTS; s++) { memset(&slot_tex[s], 0, sizeof slot_tex[s]); slot_owner[s] = -1; }
     return 0;
 }
 
@@ -122,9 +116,10 @@ static void load_screen(GSGLOBAL *gs, int screen)
         if (npcs[i].home - 1 != screen) continue;
         char name[24];
         snprintf(name, sizeof name, "npc%d.t8", i);
-        if (assets_t8(gs, name, &slot_tex[used], 1) == 0) npcs[i].slot = used++;
+        if (assets_t8_pool(gs, name, &slot_tex[used]) == 0) npcs[i].slot = used++;
     }
     loaded_screen = screen;
+    npc_gen = assets_pool_generation();
 }
 
 /* OldManComp.Update: al cambiar de pantalla, si es una pantalla nueva (mas alta que la mejor de
@@ -165,7 +160,7 @@ static int pick_quote(npc *p)
 void npc_update(GSGLOBAL *gs, const jk_king *k, float dt)
 {
     if (k->screen != quote_screen) { quote_screen = k->screen; on_screen_change(k->screen); }
-    if (k->screen != loaded_screen) load_screen(gs, k->screen);
+    if (k->screen != loaded_screen || npc_gen != assets_pool_generation()) load_screen(gs, k->screen);
     jk_rect hb = jk_body_hitbox(&k->body);
 
     for (int i = 0; i < npc_count; i++) {

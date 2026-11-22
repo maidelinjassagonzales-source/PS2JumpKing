@@ -234,6 +234,8 @@ int main(void)
 
     ui_init(gs);
     save_init();
+    if (lv->grid) load_screen_layers(gs, 0);      /* capas: VRAM permanente antes del pool */
+    assets_pool_init(gs);
 
     jk_king k;
     jk_king_init(&k, 240.0f, 200.0f);   /* posicion inicial del original */
@@ -299,8 +301,10 @@ int main(void)
         } else {
             in.left = in.right = in.jump = 0;
         }
-        if (lv->grid && k.screen != loaded_screen)
+        if (lv->grid && k.screen != loaded_screen) {
             load_screen_layers(gs, k.screen);
+            assets_pool_reset();
+        }
         if (k.events & JK_EV_JUMP)  audio_play_sfx(SFX_JUMP);
         if (k.events & JK_EV_LAND)  audio_play_sfx(SFX_LAND);
         if (k.events & JK_EV_BUMP)  audio_play_sfx(SFX_BUMP);

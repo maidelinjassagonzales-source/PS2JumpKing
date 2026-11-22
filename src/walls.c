@@ -16,7 +16,7 @@ typedef struct {
 } wall;
 
 static wall walls[MAX_WALLS];
-static int nwalls, loaded = -2;
+static int nwalls, loaded = -2, gen;
 static GSTEXTURE slot_tex[SLOTS];
 
 static int rd_i32(const unsigned char *p) { return (int)(p[0] | p[1] << 8 | p[2] << 16 | (unsigned)p[3] << 24); }
@@ -46,11 +46,7 @@ int walls_init(GSGLOBAL *gs)
         w->alpha = 1.0f;
         w->slot = -1;
     }
-    for (int s = 0; s < SLOTS; s++) {
-        memset(&slot_tex[s], 0, sizeof slot_tex[s]);
-        slot_tex[s].Vram = gsKit_vram_alloc(gs, gsKit_texture_size(480, 360, GS_PSM_T8), GSKIT_ALLOC_USERBUFFER);
-        slot_tex[s].VramClut = gsKit_vram_alloc(gs, gsKit_texture_size(16, 16, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
-    }
+    for (int s = 0; s < SLOTS; s++) memset(&slot_tex[s], 0, sizeof slot_tex[s]);
     return 0;
 }
 
@@ -62,15 +58,15 @@ static void load_screen(GSGLOBAL *gs, int screen)
         if (walls[i].screen1 - 1 != screen || used >= SLOTS) continue;
         char name[32];
         snprintf(name, sizeof name, "walls/w%d.t8", walls[i].tex);
-        if (assets_t8(gs, name, &slot_tex[used], 1) == 0 && slot_tex[used].Width <= 480 && slot_tex[used].Height <= 360)
-            walls[i].slot = used++;
+        if (assets_t8_pool(gs, name, &slot_tex[used]) == 0) walls[i].slot = used++;
     }
     loaded = screen;
+    gen = assets_pool_generation();
 }
 
 void walls_update(GSGLOBAL *gs, const jk_king *k, float dt)
 {
-    if (k->screen != loaded) load_screen(gs, k->screen);
+    if (k->screen != loaded || gen != assets_pool_generation()) load_screen(gs, k->screen);
     jk_rect hb = jk_body_hitbox(&k->body);
     for (int i = 0; i < nwalls; i++) {
         wall *w = &walls[i];
